@@ -1,6 +1,6 @@
-# CLAUDE.md — Mini-app Template
+# AGENTS.md — Mini-app Template
 
-> File này được Claude (và dev) đọc khi vibe code mini-app trong repo clone từ template này.
+> File này được Codex (và dev) đọc khi vibe code mini-app trong repo clone từ template này.
 > Đọc kỹ trước khi viết code. Đây là single source of truth cho mọi quy tắc kỹ thuật.
 
 ---
@@ -22,7 +22,7 @@
 3. Fix được apply ở repo `mushy/miniapp-template` (do team canonical).
 4. Mini-app downstream pull về qua `scripts/sync-template.sh` (xem section 11).
 
-**Nếu bạn là Claude đang vibe code mini-app**: chỉ sửa `src/App.jsx`, `src/components/<app-specific>`, `src/lib/app/*`, `migrations/*`, `api/<app-specific>.js`, `mushy.config.json`, `package.json` (thêm dep app cần). KHÔNG đụng các file trong section 11.2 "Cái gì SYNC". Nếu phải fix shared infra để app chạy được, báo dev — đừng tự sửa rồi push.
+**Nếu bạn là Codex đang vibe code mini-app**: chỉ sửa `src/App.jsx`, `src/components/<app-specific>`, `src/lib/app/*`, `migrations/*`, `api/<app-specific>.js`, `mushy.config.json`, `package.json` (thêm dep app cần). KHÔNG đụng các file trong section 11.2 "Cái gì SYNC". Nếu phải fix shared infra để app chạy được, báo dev — đừng tự sửa rồi push.
 
 **Nếu bạn đang sửa repo template canonical** (`mushy/miniapp-template` ở GitHub user `anhdqvn`): mục này không áp dụng — bạn đang ở upstream, sửa thoải mái.
 
@@ -101,7 +101,7 @@ Một **mini-app** = web app độc lập trong hệ Mushy Super App:
 - **Database**: schema riêng `app_{slug}` trong Supabase chung của Mushy
 - **Chạy 2 mode**: trong WebView của Shell (production native app) hoặc browser (dev, có bridge mock)
 
-Đọc thêm `CLAUDE.md` ở repo gốc Mushy để hiểu triết lý + kiến trúc tổng thể.
+Đọc thêm `AGENTS.md` ở repo gốc Mushy để hiểu triết lý + kiến trúc tổng thể.
 
 ### Config — `mushy.config.json` (committed)
 
@@ -493,7 +493,7 @@ import { colors, radii, fonts, shadow, typeScale, space } from './lib/theme.js';
 
 ```
 miniapp-{slug}/
-├── CLAUDE.md                 ← file này
+├── AGENTS.md                 ← file này
 ├── README.md
 ├── .env.example              ← copy sang .env, điền giá trị
 ├── package.json
@@ -751,7 +751,7 @@ Cả 2 URL `mushy-miniapp-{slug}.vercel.app` + `mushy-miniapp-{slug}-git-dev.ver
 
 ---
 
-## 10. Quick reference cho Claude (vibe coding)
+## 10. Quick reference cho Codex (vibe coding)
 
 Khi user nói:
 - **"Thêm feature X cho mini-app"** → viết UI trong `App.jsx` (hoặc tách `screens/`), dùng `db.from('table').select().eq('workspace_id', ctx.workspaceId)`, `useDialog()` cho confirm.
@@ -805,7 +805,7 @@ Mini-app downstream được **fork tại 1 thời điểm** từ template này 
 | `api/_verify.js` | JWT verification logic |
 | `scripts/setup.js` `seed.js` `refresh-token.js` | DEV onboarding flow |
 | `.env.example` | Có thể có biến mới |
-| `CLAUDE.md` | Quy tắc + bridge reference (script tự copy nếu khác) |
+| `AGENTS.md` | Quy tắc + bridge reference (script tự copy nếu khác) |
 
 ### 11.3 Cái gì KHÔNG sync (app-specific)
 
@@ -885,7 +885,7 @@ git log --oneline --since="1 month ago" -- \
   miniapp-template/src/lib \
   miniapp-template/api/_verify.js \
   miniapp-template/scripts \
-  miniapp-template/CLAUDE.md
+  miniapp-template/AGENTS.md
 ```
 
 ### 11.6 Conflict thường gặp + cách xử
@@ -893,7 +893,7 @@ git log --oneline --since="1 month ago" -- \
 - **`src/lib/supabase.js` đã custom local** (vd add helper riêng): KHÔNG nên — move helper riêng sang `src/lib/<your-app>.js`. Nếu lỡ sửa → backup trước sync rồi merge tay.
 - **`scripts/setup.js` đổi prompt**: thường chỉ là copy text mới hoặc thêm bước. Diff trước, accept nếu hợp lý.
 - **`.env.example` có biến mới**: copy biến mới sang `.env` thực + điền giá trị (vd nhờ admin nếu là token).
-- **`CLAUDE.md` thay đổi quy tắc** (vd RLS mới, bridge type mới): đọc kỹ section thay đổi, áp dụng vào code app nếu cần (vd thay native `<select>` còn sót → `Select` component).
+- **`AGENTS.md` thay đổi quy tắc** (vd RLS mới, bridge type mới): đọc kỹ section thay đổi, áp dụng vào code app nếu cần (vd thay native `<select>` còn sót → `Select` component).
 
 ### 11.7 ❌ KHÔNG push ngược về template
 
