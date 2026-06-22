@@ -11,3 +11,6 @@ dist
 # Logs
 *.log
 npm-debug.log*
+
+# Serena-specific
+.serena

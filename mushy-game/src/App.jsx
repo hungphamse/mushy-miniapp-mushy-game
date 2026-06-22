@@ -110,7 +110,7 @@ export default function App() {
       </section>
 
       <footer className="footer">
-        Mushy mini-app demo · Made with <span className="heart">♥</span>
+        Mushy game · Made with <span className="heart">♥</span>
       </footer>
     </div>
   );

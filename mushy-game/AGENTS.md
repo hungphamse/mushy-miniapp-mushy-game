@@ -264,7 +264,7 @@ function MyComponent() {
 
 **Nếu mini-app KHÔNG opt-in sharing**: `scope.workspaceId` luôn = `ctx.workspaceId`. Vẫn nên dùng `useActiveScope()` thay vì `ctx.workspaceId` trực tiếp — để khi opt-in sharing sau này không phải refactor.
 
-Xem `migrations/001_init_example.sql` làm template chi tiết.
+Xem `migrations/000_init_example.sql` làm template chi tiết.
 
 ### 3.5 Cross-workspace sharing — pattern share data sang ws khác
 
@@ -525,7 +525,7 @@ miniapp-{slug}/
 │   ├── _verify.js            ← verify JWT, KHÔNG expose endpoint
 │   └── ai-proxy.js           ← ví dụ: proxy AI request server-side
 ├── migrations/
-│   └── 001_init_example.sql  ← template migration đúng convention
+│   └── 000_init_example.sql  ← template migration đúng convention; app migration thật bắt đầu từ 001
 ├── scripts/
 │   ├── setup.js              ← npm run dev:setup
 │   ├── seed.js               ← npm run dev:seed

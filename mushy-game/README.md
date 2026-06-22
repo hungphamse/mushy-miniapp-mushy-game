@@ -1,8 +1,8 @@
-# Mini-app Template — Mushy Super App
+# Mushy Game — Mushy Super App
 
 Template repo để build mini-app trong hệ Mushy. Clone repo này, đổi `slug` trong `mushy.config.json`, bắt đầu code.
 
-> 📖 Đọc kỹ [CLAUDE.md](./CLAUDE.md) trước khi viết code — single source of truth cho mọi quy tắc kỹ thuật (DB, RLS, security, kiến trúc dev/prod, anti-patterns).
+> 📖 Đọc kỹ [CLAUDE.md](./CLAUDE.md) trước khi viết code — single source of truth cho mọi quy tắc kỹ thuật (DB, RLS, security, kiến trúc dev/prod, anti-patterns). Các plan implementation bây giờ nằm trong [docs/README.md](./docs/README.md).
 
 ## Trước khi bắt đầu — phải có Mushy account + workspace
 

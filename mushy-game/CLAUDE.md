@@ -2,6 +2,7 @@
 
 > File này được Claude (và dev) đọc khi vibe code mini-app trong repo clone từ template này.
 > Đọc kỹ trước khi viết code. Đây là single source of truth cho mọi quy tắc kỹ thuật.
+> Các implementation plan chi tiết cho Mushy Game và `level-editor` nằm ở [docs/README.md](./docs/README.md).
 
 ---
 
