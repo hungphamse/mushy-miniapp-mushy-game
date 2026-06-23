@@ -3,6 +3,7 @@ import { getConfigStatus } from './lib/env.js';
 import { isOwnerUser } from './lib/owner.js';
 import { useAuthSession } from './lib/useAuthSession.js';
 import { signInWithPassword, signOut } from './lib/supabaseClient.js';
+import { EditorShell } from './components/EditorShell.jsx';
 import './App.css';
 
 const INITIAL_FORM = {
@@ -74,6 +75,8 @@ export default function App() {
 
   if (loading) return <div className="loading">Loading editor session</div>;
 
+  const isOwner = user && ownerCheck.allowed;
+
   return (
     <main className="page">
       <section className="hero">
@@ -88,6 +91,19 @@ export default function App() {
         <span className="session-pill">{user ? user.email : 'Signed out'}</span>
       </section>
 
+      {isOwner && (
+        <EditorShell
+          session={session}
+          signingOut={submitting}
+          user={user}
+          onSignOut={handleSignOut}
+        />
+      )}
+
+      {isOwner && sessionError && <div className="alert">{sessionError}</div>}
+      {isOwner && authError && <div className="alert">{authError}</div>}
+
+      {!isOwner && (
       <section className="grid">
         <article className="card">
           {!user ? (
@@ -192,6 +208,7 @@ export default function App() {
           )}
         </aside>
       </section>
+      )}
     </main>
   );
 }

@@ -255,6 +255,129 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.editor-shell {
+  display: grid;
+  gap: 18px;
+  margin-top: 22px;
+}
+
+.shell-header,
+.shell-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 22px;
+  align-items: start;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  background: rgba(255, 250, 241, 0.88);
+  box-shadow: 0 16px 44px rgba(50, 35, 14, 0.08);
+}
+
+.shell-header h2,
+.shell-panel h3 {
+  margin: 0;
+  font-size: clamp(1.7rem, 3vw, 2.55rem);
+  letter-spacing: -0.05em;
+}
+
+.shell-header p,
+.shell-panel p {
+  max-width: 660px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.shell-account {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  min-width: min(320px, 100%);
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: #fffdf7;
+  text-align: right;
+}
+
+.shell-account span,
+.shell-account small {
+  color: var(--muted);
+  font-family: "IBM Plex Mono", "Courier New", monospace;
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}
+
+.shell-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.shell-tab {
+  min-height: 86px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 250, 241, 0.76);
+  color: var(--ink);
+  text-align: left;
+  font-size: 1.05rem;
+  font-weight: 900;
+  box-shadow: 0 12px 34px rgba(50, 35, 14, 0.06);
+}
+
+.shell-tab span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", "Courier New", monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.shell-tab.active {
+  border-color: rgba(47, 111, 78, 0.42);
+  background: linear-gradient(135deg, var(--fern) 0%, var(--fern-dark) 100%);
+  color: #fffaf1;
+}
+
+.shell-tab.active span {
+  color: rgba(255, 250, 241, 0.76);
+}
+
+.panel-task-list {
+  display: grid;
+  gap: 10px;
+  min-width: min(360px, 100%);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.panel-task-list li {
+  position: relative;
+  padding: 13px 14px 13px 42px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fffdf7;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.panel-task-list li::before {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 12px;
+  height: 12px;
+  content: "";
+  border: 2px solid var(--fern);
+  border-radius: 999px;
+}
+
 .loading {
   min-height: 100vh;
   display: grid;
@@ -273,17 +396,27 @@ h1 {
   }
 
   .hero,
-  .grid {
+  .grid,
+  .shell-header,
+  .shell-panel,
+  .shell-tabs {
     grid-template-columns: 1fr;
   }
 
   .hero,
-  .card {
+  .card,
+  .shell-header,
+  .shell-panel {
     border-radius: 22px;
     padding: 20px;
   }
 
   .session-pill {
     width: fit-content;
+  }
+
+  .shell-account {
+    justify-items: start;
+    text-align: left;
   }
 }

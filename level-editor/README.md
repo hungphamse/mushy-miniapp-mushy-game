@@ -11,6 +11,7 @@ This scaffold covers:
 - `LE-003`: Supabase browser helper plus server/API helper boundary.
 - `LE-004`: Password login/logout/session handling.
 - `LE-005`: Owner allowlist gate for the editor UI.
+- `LE-006`: Authenticated editor shell with Levels, Assets, and Service Tokens placeholders.
 
 ## Local Setup
 
