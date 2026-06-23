@@ -10,7 +10,7 @@
 
 ### 0.1 Introduction
 
-Mushy Game is a **daily puzzle sub-platform** built as a Mushy mini-app. Each day, every registered game gets a new published level from the companion `level-editor` level catalog service and its Vercel Cron job. Players solve puzzles, earn streaks, and compare results with their workspace teammates and globally. The platform is designed so new game types can be plugged in with minimal boilerplate — see §17 for the complete guide.
+Mushy Game is a **daily puzzle sub-platform** built as a Mushy mini-app. Each day, every registered game gets a new published level from the editor-owned level catalog managed by the companion `level-editor/` app and its Vercel Cron job. Players solve puzzles, earn streaks, and compare results with their workspace teammates and globally. The platform is designed so new game types can be plugged in with minimal boilerplate — see §17 for the complete guide.
 
 ### 0.2 Application Target
 
@@ -103,8 +103,8 @@ HomeScreen
 
 ### 1.4 Companion `level-editor` App _(separate project)_
 - Level authoring is **not** part of the Mushy Game screen tree
-- Upcoming-level preview, custom override, duplicate checks, and typed authoring UI live in the sibling `level-editor/` project and are deployed separately from the Mushy mini-app
-- The companion app reuses the same generator registry as Mushy Game, while the canonical level-number derivation lives in the editor-owned catalog schema so date previews match the published level rows exactly
+- Upcoming-level preview, custom override, duplicate checks, and typed authoring UI live in the `level-editor/` project and are deployed separately from the Mushy mini-app
+- The companion app keeps its own copy of the generator registry instead of importing from `mushy-game/`; when a generator changes, update both copies and bump `generator_version` as needed. The canonical level-number derivation lives in the editor-owned catalog schema so date previews match the published level rows exactly
 - Saved levels are still marked `is_custom = true`; the `level-editor` catalog cron skips those dates via `ON CONFLICT DO NOTHING`
 
 ---
@@ -133,13 +133,13 @@ Level authoring is outside this router — it belongs to the separate `level-edi
 
 Mushy Game no longer carries an in-app privileged authoring surface. There is no in-app level-authoring screen, no owner-env gate, and no level-authoring route in the Mushy Game deployment.
 
-Instead, level authoring lives in the sibling `level-editor/` project at the repo root. It is a **separate app and separate deploy target** even if it shares this monorepo with `mushy-game/`.
+Instead, level authoring lives in `level-editor/`, a sibling project to `mushy-game/`. It is a **separate app and separate deploy target** even if it shares this workspace with `mushy-game/`.
 
 Boundary of responsibility:
 - **`mushy-game/`** — gameplay, player sessions, stats, and runtime API endpoints that consume published level bundles
 - **`level-editor/`** — level catalog database, upcoming-level preview, custom overrides, duplicate checks, typed authoring UX, asset storage metadata, and daily level publishing cron
 
-The Mushy shell context (`window.__APP_CONTEXT__`) still only provides `{ token, workspaceId, userId, role, workspaceSlug }` — see §0.3. That is sufficient for gameplay APIs. The companion `level-editor` app owns its own authentication/authorization model and server-side write path on its editor-owned Supabase project; creator accounts are provisioned manually there and sign in with password-based auth. Mushy Game does not need an app-owner bit in `ctx` anymore.
+The Mushy shell context (`window.__APP_CONTEXT__`) still only provides `{ token, workspaceId, userId, role, workspaceSlug }` — see §0.3. That is sufficient for gameplay APIs. The companion `level-editor` app uses its editor-owned Supabase project for password-based auth. Human editor/owner accounts are provisioned manually there. Mushy Game runtime APIs do **not** log in with an editor email/password; they call level-editor HTTP APIs with a custom read-only service token created by a level-editor owner. The service token is stored only in Mushy Game backend environment variables and is never sent to the browser. Mushy Game does not need an app-owner bit in `ctx` anymore.
 
 ### 3.1 Companion `level-editor` Asset Storage
 
@@ -150,12 +150,12 @@ Storage/database boundary:
 - Image bytes live in an editor-owned **R2 bucket** configured through server-side environment variables on the `level-editor` deployment.
 - Do **not** copy Mushy Game's miniapp Supabase config merely to upload images, and do **not** write editor assets into the `miniapp-mushy-game` bucket.
 - Do **not** modify `mushy-game/src/lib/storage.js`. `AGENTS.md` marks `src/lib/*` as synced shared infra; app-specific helpers must live under `src/lib/app/*` or `src/app-lib/*`. Because image upload belongs to the separate `level-editor` app, create a dedicated helper such as `level-editor/src/lib/editorAssets.js` instead.
-- Persist `object_key` as the canonical asset reference. Derive `public_url` only when a UI or runtime needs to display the asset, and give that URL a short TTL that matches the normal login session window (about 1 hour).
+- Persist `object_key` as the canonical asset reference. Follow the `mushy-game/src/lib/storage.js` model: generate a short-lived view URL from `object_key` only when a UI or runtime needs to display the asset, using a TTL that matches the normal login session window (about 1 hour).
 
 R2 access model:
 - R2 credentials are server-only (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL` or equivalent).
 - The browser never receives R2 credentials. It only receives a short-lived presigned upload URL from `level-editor` after the server validates the editor user, file type, and file size.
-- Runtime image reads use a stable public CDN URL because level content is visible to all players who can play that daily level. Do not use short-lived signed URLs inside saved level content.
+- Runtime image reads use the same short-lived view URL model as `mushy-game/src/lib/storage.js`: call the editor-owned storage/API helper with `object_key`, receive a temporary URL, and keep URLs out of saved level content.
 - Object keys are editor-scoped, not workspace-scoped. Recommended format: `assets/{env}/{yyyy}/{mm}/{uuid}.{ext}`. Never use `{workspace_id}/...` or `{editor_id}/...` in the existing miniapp bucket; that path shape is reserved for the Mushy template storage policies.
 
 Asset metadata model in the `level-editor` Supabase project:
@@ -185,62 +185,76 @@ level_asset_refs
 - created_at timestamptz not null default now()
 ```
 
-`public_url` is not a persisted column. Derive it from `object_key` when the editor or runtime needs to display an asset, and give the derived URL a TTL that matches the normal login session window (about 1 hour).
+`public_url` is not a persisted column. Derive it from `object_key` when the editor or runtime needs to display an asset, using the same short-lived signed URL model as `mushy-game/src/lib/storage.js`.
 
 Level content contract:
-- Custom level content may store `imageAssetId` and `imageObjectKey`.
+- Custom level content stores `imageObjectKey`.
 - `imageObjectKey` is the canonical persisted reference. When the editor or runtime needs to render the asset, it resolves a short-lived `publicUrl` from that object key instead of storing a permanent URL in the level content.
-- `imageAssetId` lets `level-editor` reopen the level, show the selected asset, track reuse, and prevent unsafe deletion.
 - Do not overwrite an existing R2 object. If an image changes, upload a new object and create a new asset record so old published levels remain visually immutable.
 
 Reuse and deletion:
-- New levels can reuse any non-archived `editor_assets` row the editor user is authorized to see.
+- New levels can reuse any non-archived `editor_assets` row. V1 does not add a per-game editor permission model; access is controlled by manually provisioned editor-owned Supabase accounts.
 - The asset picker should support search/filter by `game_slug`, tag, filename/alt text, and recently used assets.
 - Removing an image from a level deletes only the `level_asset_refs` row and clears the level content field; it does not delete the R2 object.
 - `DELETE /api/assets/:id` archives the asset when it is still referenced by any saved/published level.
 - Hard delete from R2 is allowed only when `ref_count = 0`; otherwise the asset is hidden from future picker results but remains available to old levels.
 
-### 3.2 Companion `level-editor` Project Structure
+### 3.2 Workspace Tree & Companion `level-editor` Project Structure
 
-The companion project is not a screen inside Mushy Game. It is a separate web app, separate deployment, and separate Supabase project. Its database migrations are separate from `mushy-game/migrations/`.
+The workspace contains two sibling projects. Unless a path explicitly starts with `mushy-game/`, any `level-editor/...` path in this document refers to the top-level sibling app shown below, not `mushy-game/level-editor/...`.
 
 ```text
-level-editor/
-├── package.json
-├── vercel.json                         ← level catalog cron lives here
-├── migrations/
-│   └── 001_level_catalog_schema.sql    ← owns games, daily_levels, editor_assets, level_asset_refs
-├── src/
-│   ├── App.jsx                         ← calendar + editor UI for future levels
-│   ├── lib/
-│   │   ├── levelCatalog.js             ← calls level-editor level APIs
-│   │   └── editorAssets.js             ← calls level-editor asset APIs; R2 helper wrapper
-│   └── components/
-│       ├── editors/
-│       │   └── <GameSlug>LevelEditor.jsx
-│       └── fields/
-│           └── ImageAssetField.jsx
-└── api/
-    ├── levels/
-    │   ├── index.js                    ← list/save custom daily levels
-    │   ├── preview.js                  ← generated preview for date+game
-    │   └── check-duplicate.js
-    ├── assets/
-    │   ├── index.js                    ← list reusable assets
-    │   ├── presign.js                  ← create R2 presigned upload URL
-    │   ├── [id]/complete.js            ← finalize uploaded asset
-    │   └── [id]/index.js               ← archive/hard-delete asset
-    └── cron/
-        └── generate-levels.js          ← inserts daily_levels into the level catalog DB
+workspace-root/
+├── mushy-game/                         ← Mushy mini-app: gameplay, sessions, stats
+│   ├── docs/
+│   ├── src/
+│   ├── api/
+│   └── migrations/                     ← runtime/player schema only
+└── level-editor/                       ← separate editor app and deploy target
+    ├── package.json
+    ├── vercel.json                     ← level catalog cron lives here
+    ├── migrations/
+    │   └── 001_level_catalog_schema.sql ← owns games, daily_levels, editor_assets, level_asset_refs, editor_service_tokens
+    ├── src/
+    │   ├── App.jsx                     ← calendar + editor UI for future levels
+    │   ├── lib/
+    │   │   ├── levelCatalog.js         ← calls level-editor level APIs
+    │   │   ├── editorAssets.js         ← calls level-editor asset APIs; R2 helper wrapper
+    │   │   └── serviceTokens.js        ← owner-only service-token API helper
+    │   └── components/
+    │       ├── editors/
+    │       │   └── <GameSlug>LevelEditor.jsx
+    │       ├── fields/
+    │       │   └── ImageAssetField.jsx
+    │       └── settings/
+    │           └── ServiceTokensPanel.jsx
+    └── api/
+        ├── levels/
+        │   ├── index.js                ← list/save custom daily levels
+        │   ├── preview.js              ← generated preview for date+game
+        │   └── check-duplicate.js
+        ├── assets/
+        │   ├── index.js                ← list reusable assets
+        │   ├── presign.js              ← create R2 presigned upload URL
+        │   ├── [id]/complete.js        ← finalize uploaded asset
+        │   └── [id]/index.js           ← archive/hard-delete asset
+        ├── service-tokens/
+        │   ├── index.js                ← owner-only list/create read service tokens
+        │   └── [id]/revoke.js          ← owner-only revoke
+        └── cron/
+            └── generate-levels.js      ← inserts daily_levels into the level catalog DB
 ```
+
+The companion project is not a screen inside Mushy Game. It is a sibling web app, separate deployment, and separate Supabase project. Its database migrations are separate from `mushy-game/migrations/`.
 
 `level-editor/migrations/001_level_catalog_schema.sql` is the **daily level schema file**. It owns:
 - `games`
 - `daily_levels`
 - `editor_assets`
 - `level_asset_refs`
+- `editor_service_tokens`
 
-`mushy-game/migrations/001_mushy_game_schema.sql` must not redefine those tables. Mushy Game stores only runtime/player data and treats `game_id` / `level_id` as external IDs copied from the level catalog service.
+`mushy-game/migrations/001_mushy_game_schema.sql` must not redefine those tables. Mushy Game stores only runtime/player data and treats `game_id` / `level_id` as external IDs copied from level-editor HTTP API responses.
 
 ---
 
@@ -456,7 +470,7 @@ With date arithmetic, day 14 is always #14 no matter when or how the row was cre
 Trusted editor users can customise any upcoming date's level via the companion `level-editor` app. The flow is **preview-first, edit-second**:
 
 1. Editor user clicks a date in `level-editor`
-2. The editor opens pre-populated with the **cron-generated content for that date** — computed on-the-fly by calling the same generator function with the date seed, without touching the DB
+2. The editor opens pre-populated with the **cron-generated content for that date** — computed on-the-fly by calling the level-editor app's local copy of the generator with the date seed, without touching the DB
 3. Editor user can edit the content JSON (or leave it as-is) and save — this writes an `is_custom = true` row to `daily_levels` with `level_number` sourced from the catalog schema helper
 4. The cron uses `ON CONFLICT (game_id, puzzle_date) DO NOTHING`, so any date that already has a row is silently skipped
 
@@ -496,7 +510,7 @@ export const gameMeta = {
 
 export function generate(seed) { ... return content; }
 ```
-All generators are registered in `src/lib/generators/index.js` — the cron and the companion level-editor preview endpoint both resolve `generators[game.slug]` from this registry. See §17.2–17.3 for the full generator contract and registration steps.
+Mushy Game and `level-editor/` each keep their own copy of the generator registry. Do not import generator files across the app boundary. The level-editor cron and preview endpoint resolve `generators[game.slug]` from the level-editor copy; Mushy Game runtime/dev helpers resolve from the Mushy Game copy. When a generator changes, update both copies and increment `generator_version` if the same seed can now produce materially different content.
 
 #### Seeded RNG — `src/lib/utils/random.js`
 
@@ -569,10 +583,10 @@ The same `seededRandom` implementation must be used everywhere the seed is consu
 
 The database schema is split by ownership:
 
-- **Level catalog DB (`level-editor` Supabase project)** — owns `games`, `daily_levels`, and editor asset metadata. Its migration file is `level-editor/migrations/001_level_catalog_schema.sql`.
+- **Level catalog DB (`level-editor` Supabase project)** — owns `games`, `daily_levels`, editor asset metadata, and service-token metadata. Its migration file is `level-editor/migrations/001_level_catalog_schema.sql`.
 - **Mushy Game runtime DB (`mushy-game` miniapp schema)** — owns `player_sessions` only. Its migration file is `mushy-game/migrations/001_mushy_game_schema.sql`.
 
-Mushy Game runtime endpoints receive level catalog rows from the level catalog service and copy stable external IDs into `player_sessions`. There are no cross-project foreign keys between the two databases.
+Mushy Game runtime endpoints receive level catalog rows by calling the level-editor HTTP APIs with a read-only service token, then copy stable external IDs into `player_sessions`. Mushy Game never queries the editor-owned Supabase database directly, never stores an editor email/password, and there are no cross-project foreign keys between the two databases.
 Mushy Game runtime reads the persisted `level_number` from published level rows; it never recomputes level numbering locally.
 
 #### Level catalog DB: `games`
@@ -592,7 +606,7 @@ generator_version   integer      NOT NULL DEFAULT 1  -- current deterministic ge
 rules_version       integer      NOT NULL DEFAULT 1  -- current scoring/win/loss semantics for new levels
 created_at           timestamptz DEFAULT now()
 ```
-Direct browser access is not required for players. The level-editor API is the write/read boundary for editor users, and Mushy Game runtime APIs consume published level bundles through the level catalog service.
+Direct browser access is not required for players. The level-editor HTTP API is the only access boundary for catalog reads/writes: editor users write through password-authenticated editor sessions, and Mushy Game runtime APIs consume published level bundles through a read-only service token.
 
 > `score_direction = null` means the game has no rankable metric — percentile cards are omitted on the result screen. Only streak card shows.
 
@@ -612,6 +626,28 @@ created_at   timestamptz DEFAULT now()
 UNIQUE (game_id, puzzle_date)
 ```
 Direct browser access is not required for players. Writes come from `level-editor` cron or the `level-editor` save-override API, both of which use the editor-owned catalog schema helper to derive `level_number`. Mushy Game stores no local copy of `content`; it receives the level bundle from server-side level catalog reads.
+
+#### Level catalog DB: `editor_service_tokens`
+```sql
+id              uuid        PRIMARY KEY DEFAULT gen_random_uuid()
+name            text        NOT NULL                    -- e.g. "Mushy Game production read token"
+token_hash      text        NOT NULL UNIQUE             -- hash/HMAC of the raw token; raw token is shown once only
+token_prefix    text        NOT NULL                    -- safe display prefix, e.g. "le_read_abcd"
+scopes          text[]      NOT NULL DEFAULT '{catalog:read,asset:read}'
+created_by      uuid        NOT NULL REFERENCES auth.users(id)
+created_at      timestamptz NOT NULL DEFAULT now()
+last_used_at    timestamptz
+expires_at      timestamptz
+revoked_at      timestamptz
+```
+
+`editor_service_tokens` belongs to the level-editor project. It is not a Supabase Auth user and it is not a Supabase session token. A level-editor owner creates the raw token through the owner-only UI; the backend stores only a hash/HMAC and shows the raw token exactly once. Mushy Game stores the raw token in server-only deployment env vars and sends it to level-editor with `Authorization: Bearer <token>` for catalog reads.
+
+V1 scopes:
+- `catalog:read` — read active games and published/current daily level bundles needed by Mushy Game runtime APIs.
+- `asset:read` — resolve short-lived view URLs for object keys referenced by published levels.
+
+No write scopes are issued in V1. Custom level writes, asset uploads, service-token creation, revocation, and cron publishing remain level-editor-owned privileged operations.
 
 #### Versioning model
 
@@ -931,7 +967,7 @@ src/
     └── generators/
         ├── index.js                  ← registry: gameSlug → generator fn (see §17.3)
         ├── <game-slug>.js            ← one file per game type; see each game's plan document
-        └── word-guess-constants.js   ← shared MIN_WORD_LENGTH / MAX_WORD_LENGTH; reused by both the generator and the companion WordGuess level editor
+        └── word-guess-constants.js   ← MIN_WORD_LENGTH / MAX_WORD_LENGTH; duplicate into level-editor and keep aligned
 
 api/
 ├── _verify.js                        ← existing JWT verify helper
@@ -956,23 +992,27 @@ scripts/
 vercel.json                           ← runtime miniapp deploy config; no daily-level cron here
 mushy.config.json                     ← slug ("mushy-game"), Supabase URL + anon key; schema derived as app_mushy_game (prod) / app_mushy_game_dev (dev)
 
-level-editor/                         ← sibling project, separate deploy, owns level authoring
+level-editor/                         ← sibling project, separate deploy, owns level authoring + service-token management
 ├── package.json
 ├── vercel.json                       ← Vercel Cron for level catalog publishing
 ├── migrations/
-│   └── 001_level_catalog_schema.sql  ← games + daily_levels + editor_assets + level_asset_refs
+│   └── 001_level_catalog_schema.sql  ← games + daily_levels + editor_assets + level_asset_refs + editor_service_tokens
 ├── src/
-│   ├── App.jsx                       ← calendar + editor UI for future levels
+│   ├── App.jsx                       ← calendar + editor UI + owner settings
 │   ├── lib/
 │   │   ├── levelCatalog.js           ← level-editor-only level catalog API helper
-│   │   └── editorAssets.js           ← level-editor-only R2 asset API helper; do not import or edit mushy-game/src/lib/storage.js
+│   │   ├── editorAssets.js           ← level-editor-only R2 asset API helper; do not import or edit mushy-game/src/lib/storage.js
+│   │   └── serviceTokens.js          ← owner-only service-token API helper
 │   └── components/
 │       ├── editors/
 │       │   └── <GameSlug>LevelEditor.jsx
-│       └── fields/                   ← shared field primitives + JSON fallback
+│       ├── fields/                   ← shared field primitives + JSON fallback
+│       └── settings/
+│           └── ServiceTokensPanel.jsx
 └── api/
     ├── levels/                       ← preview / save / clear override / duplicate check
     ├── assets/                       ← R2 presign / complete / list / archive-delete for editor-owned image assets
+    ├── service-tokens/               ← owner-only create/list/revoke read service tokens
     └── cron/
         └── generate-levels.js        ← auto-insert daily_levels into level catalog DB
 ```
@@ -985,7 +1025,7 @@ level-editor/                         ← sibling project, separate deploy, owns
 - Auth: `_verify.js`
 - **Required header:** `x-workspace-id: <ctx.workspaceId>` — same workspace context as the rest of the app.
 - Returns the current workspace's home summary for all active games, including today's level and the primary button state (`Start` or `See the result`).
-- Server reads published game/level data from the level catalog service; Mushy Game does not have local `games` or `daily_levels` tables.
+- Server reads published game/level data from the level-editor HTTP APIs using `LEVEL_EDITOR_SERVICE_TOKEN`; Mushy Game does not have local `games` or `daily_levels` tables and does not connect directly to the editor-owned Supabase project.
 - Read-only. No session rows are created or mutated here.
 
 ### `POST /api/sessions/enter?gameSlug=`
@@ -994,8 +1034,8 @@ level-editor/                         ← sibling project, separate deploy, owns
 - Query param: `gameSlug` — the `slug` value from the level catalog `games` table (e.g. `word-guess`)
 - Body: `{ intent: 'start' | 'see_result', decision?: 'continue' | 'skip' }`
 - Server steps:
-  1. Fetch `games` row for `gameSlug` from the level catalog service (must be `is_active = true`); return 404 if not found.
-  2. Fetch `daily_levels` row from the level catalog service where `game_id = game.id AND puzzle_date = today`; return 503 if today's level has not been generated yet.
+  1. Fetch `games` row for `gameSlug` from the level-editor HTTP APIs using `LEVEL_EDITOR_SERVICE_TOKEN` (must be `is_active = true`); return 404 if not found.
+  2. Fetch `daily_levels` row from the level-editor HTTP APIs where `game_id = game.id AND puzzle_date = today`; return 503 if today's level has not been generated yet.
   3. Look up today's session.
   4. Look up the immediately previous unresolved session in the same workspace (`puzzle_date = yesterday UTC`, `status = 'in_progress'`).
   5. If `intent = 'see_result'` and today's session is completed, return `mode = 'show_result'`.
@@ -1047,34 +1087,99 @@ level-editor/                         ← sibling project, separate deploy, owns
 ### Companion `level-editor` API and cron surface
 
 Mushy Game intentionally does **not** expose level-authoring endpoints or daily-level publishing cron. The following routes belong to the separate `level-editor` deployment instead:
+- `GET /api/catalog/games?slug=&active=`
+- `GET /api/catalog/daily-level?gameSlug=&puzzleDate=`
 - `GET /api/levels?gameId=&from=&to=`
 - `GET /api/levels/preview?gameId=&puzzleDate=`
 - `POST /api/levels`
 - `DELETE /api/levels?gameId=&puzzleDate=`
 - `GET /api/levels/check-duplicate?gameId=&answer=`
 - `GET /api/assets?gameSlug=&q=&tag=`
+- `POST /api/assets/view-url`
 - `POST /api/assets/presign`
 - `POST /api/assets/:id/complete`
 - `DELETE /api/assets/:id`
+- `GET /api/service-tokens`
+- `POST /api/service-tokens`
+- `POST /api/service-tokens/:id/revoke`
 - `GET /api/cron/generate-levels`
 
 Those routes own:
+- service-token-authenticated published catalog reads for Mushy Game runtime APIs
 - upcoming-level calendar queries
 - previewing generator output for a date without writing
 - saving / clearing `is_custom` overrides
 - game-specific duplicate detection such as Wordle answer reuse checks
 - editor-owned R2 image asset import, reuse, archive/delete, and ref-count tracking
+- owner-only service-token creation/list/revocation
 - daily level generation and catalog publishing
 
-The contract is shared through generator logic (`generators[game.slug]`) and the editor-owned catalog schema's immutable `level_number` helper so the companion app stays consistent with Mushy Game publishing. Mushy Game only consumes persisted `level_number` values from published level rows.
+The contract is mirrored through duplicated generator logic (`generators[game.slug]`) and the editor-owned catalog schema's immutable `level_number` helper so the companion app stays consistent with Mushy Game publishing. Mushy Game only consumes persisted `level_number` values from published level rows.
+
+Auth split:
+- Runtime catalog reads (`/api/catalog/*` and published asset view-url reads) accept `Authorization: Bearer <LEVEL_EDITOR_SERVICE_TOKEN>` and require the relevant service-token scope. They return only active/published data that Mushy Game needs to start or resume gameplay.
+- Editor management routes (`/api/levels/*`, upload/presign asset routes, duplicate checks, and asset library management) require a password-authenticated level-editor Supabase user session.
+- Owner-only routes (`/api/service-tokens/*`) require a password-authenticated owner account in the level-editor app.
+- Cron uses Vercel `CRON_SECRET`, not a user session and not a service token.
+
+Mushy Game deployment env for catalog reads:
+```text
+LEVEL_EDITOR_API_BASE_URL=https://<level-editor-deployment>
+LEVEL_EDITOR_SERVICE_TOKEN=le_read_...
+```
+
+Mushy Game sends that token only from server-side API functions:
+```http
+Authorization: Bearer <LEVEL_EDITOR_SERVICE_TOKEN>
+```
+
+The browser never receives level-editor credentials or service tokens.
+
+Runtime catalog endpoint contract:
+- `GET /api/catalog/games?slug=&active=` returns active game metadata needed by HomeScreen and session entry (`id`, `slug`, display metadata, timer/score/version fields). Requires `catalog:read`.
+- `GET /api/catalog/daily-level?gameSlug=&puzzleDate=` returns the published daily level bundle for that game/date (`game`, `level`, `content`, version snapshots, persisted `level_number`). Requires `catalog:read`.
+- Runtime catalog endpoints must not expose future draft/custom rows beyond the requested published date, editor-only audit metadata, pending assets, service-token metadata, or write capabilities.
 
 Asset endpoint contract:
 - `GET /api/assets?gameSlug=&q=&tag=` returns ready, non-archived assets visible to the editor user, including `id`, `objectKey`, a short-lived `publicUrl` for preview/rendering, `altText`, dimensions, tags, and `refCount`.
-- `POST /api/assets/presign` accepts `{ fileName, mimeType, sizeBytes, gameSlug?, altText?, tags? }`, validates editor authorization + content type + size, creates an `editor_assets` row with a pending/ready marker, and returns `{ assetId, objectKey, uploadUrl, publicUrl, headers? }` where `publicUrl` is derived on demand and should not be persisted in level content.
+- `POST /api/assets/view-url` accepts `{ objectKey }`, verifies the caller can read the referenced asset, and returns `{ publicUrl, expiresAt }`. Editor sessions can use it for previews; service tokens can use it only with `asset:read` and only for object keys referenced by published levels.
+- `POST /api/assets/presign` accepts `{ fileName, mimeType, sizeBytes, gameSlug?, altText?, tags? }`, validates the authenticated editor session + content type + size, creates an `editor_assets` row with a pending/ready marker, and returns `{ assetId, objectKey, uploadUrl, headers? }`. It does not return or persist a view URL.
+- Preview/rendering code asks the editor-owned Supabase/storage helper for a short-lived view URL from `objectKey` only when display is needed, following the `mushy-game/src/lib/storage.js` pattern.
 - The browser uploads the file directly to the returned R2 presigned URL. R2 credentials never reach the browser.
 - `POST /api/assets/:id/complete` verifies/finalizes the asset after upload and makes it selectable. The endpoint may inspect image dimensions if the implementation supports it; otherwise dimensions can remain null.
 - `DELETE /api/assets/:id` checks `level_asset_refs`. If referenced, set `archived_at` only. If unreferenced, delete the R2 object and then delete or archive the metadata row.
 - `POST /api/levels` must update `level_asset_refs` from the saved content. Because `level-editor` and Mushy Game use separate Supabase projects, do not rely on cross-project foreign keys; store denormalized `{ asset_id, game_slug, puzzle_date, level_id?, content_path }` refs.
+
+### Owner Service-Token UI and API
+
+`level-editor` includes an owner-only Settings area for creating and managing service tokens used by backend consumers such as Mushy Game.
+
+Owner account model:
+- Owner accounts are normal level-editor Supabase Auth users.
+- V1 owner bootstrap is server-side and manual, for example `LEVEL_EDITOR_OWNER_USER_IDS` or `LEVEL_EDITOR_OWNER_EMAILS` on the level-editor deployment.
+- Do not use user-editable `user_metadata` for owner checks. If the project later moves owner state into Supabase Auth claims, use server-controlled `app_metadata` or a dedicated owner table.
+- Non-owner editor users can author levels and assets, but cannot list, create, or revoke service tokens.
+
+Settings UI:
+- Add a `ServiceTokensPanel` visible only to owner accounts.
+- The panel lists existing tokens by safe metadata only: `name`, `tokenPrefix`, `scopes`, `createdAt`, `lastUsedAt`, `expiresAt`, and `revokedAt`.
+- The raw token is never shown after creation.
+- Create form fields: `name`, fixed/read-only scopes (`catalog:read`, `asset:read`), optional expiry.
+- On create, the API returns the raw token exactly once. The UI shows a one-time copy box with instructions to store it in the Mushy Game deployment env as `LEVEL_EDITOR_SERVICE_TOKEN`.
+- Revoke action sets `revoked_at`; it does not delete the row, so audit/history remains visible.
+- Rotation is create-new-token → update Mushy Game env/redeploy → revoke-old-token.
+
+Service-token API contract:
+- `GET /api/service-tokens` — owner-only; returns token metadata, never raw token or token hash.
+- `POST /api/service-tokens` — owner-only; creates a random raw token with prefix such as `le_read_`, stores only `token_hash`, and returns `{ token, tokenMeta }` once.
+- `POST /api/service-tokens/:id/revoke` — owner-only; sets `revoked_at`.
+
+Service-token validation:
+- Implement a level-editor server helper such as `requireServiceToken(scope)` for runtime catalog endpoints.
+- Hash/HMAC the presented token and compare against `editor_service_tokens.token_hash` using constant-time comparison where available.
+- Reject missing, revoked, expired, or insufficient-scope tokens.
+- Update `last_used_at` after successful validation.
+- Never use the level-editor Supabase `service_role` key in a browser and never store a Supabase Auth refresh token in Mushy Game env.
 
 ### `GET /api/cron/generate-levels`
 - Auth: Vercel `CRON_SECRET` header (not JWT)
@@ -1093,7 +1198,7 @@ The Mushy Game runtime deployment uses `SUPABASE_SERVICE_ROLE_KEY` in exactly **
 |---|---|---|
 | `api/stats/global.js` | Cross-workspace aggregate query bypasses per-workspace RLS | Returns COUNT + AVG only — no row-level data |
 
-All other Mushy Game runtime API endpoints use the caller's JWT + standard RLS. Level catalog cron/write credentials belong to the separate `level-editor` deployment and are documented with `level-editor/migrations/001_level_catalog_schema.sql`.
+All other Mushy Game runtime API endpoints use the caller's JWT + standard RLS for Mushy Game data. When those endpoints need published catalog data, they call the level-editor HTTP API with `LEVEL_EDITOR_SERVICE_TOKEN`; they do not use the level-editor Supabase service role key, a Supabase Auth refresh token, or an editor email/password. Level catalog cron/write credentials belong to the separate `level-editor` deployment and are documented with `level-editor/migrations/001_level_catalog_schema.sql`.
 
 ---
 
@@ -1112,7 +1217,7 @@ The two helper functions used in `player_sessions` RLS are **defined on the Mush
 
 See `migrations/000_init_example.sql` for a working example of both helpers in action.
 
-`migrations/001_mushy_game_schema.sql` only creates Mushy Game runtime/player tables. It must not create `games`, `daily_levels`, `editor_assets`, or `level_asset_refs`; those live in `level-editor/migrations/001_level_catalog_schema.sql`.
+`migrations/001_mushy_game_schema.sql` only creates Mushy Game runtime/player tables. It must not create `games`, `daily_levels`, `editor_assets`, `level_asset_refs`, or `editor_service_tokens`; those live in `level-editor/migrations/001_level_catalog_schema.sql`.
 
 ### Player sessions — workspace-readable, caller-owned writes
 `player_sessions` is both the player's mutable game state and the source for workspace leaderboard/history display. The RLS boundary is therefore intentionally asymmetric:
@@ -1253,41 +1358,82 @@ Following Mushy v3.0 tokens per CLAUDE.md §6:
 
 ## 16. Implementation Phases
 
-### Phase 1 — Schema + infrastructure
-1. Write `level-editor/migrations/001_level_catalog_schema.sql` (`games`, `daily_levels`, `editor_assets`, `level_asset_refs`)
-2. Write `mushy-game/migrations/001_mushy_game_schema.sql` (`player_sessions` + workspace-scoped session uniqueness + freeze_count/streak_frozen + RLS)
-3. Submit/apply each migration through its owning project flow; do not put level catalog tables in the Mushy Game migration
-4. Add `level-editor/vercel.json` with catalog cron config
-5. Write `src/lib/generators/word-guess.js` (seeded generator shared by level-editor preview/cron and Mushy Game runtime)
+Build `level-editor` first. It owns the level catalog, cron publishing, editor assets, and service-token boundary that Mushy Game consumes later. Mushy Game runtime work should start only after the catalog can publish levels and serve them through service-token-authenticated HTTP APIs.
 
-### Phase 2 — Level generation pipeline
-1. `level-editor/api/cron/generate-levels.js` (insert via the catalog schema helper, `ON CONFLICT DO NOTHING`)
-2. `scripts/generate-level.js` dev helper (preview output for any date)
-3. Keep generator logic and the editor-owned catalog schema's level-number helper stable for the companion `level-editor` app
-4. Document the preview/save override contract that `level-editor` consumes outside the Mushy Game deployment
+### Phase 1 — Level-Editor Foundation
+1. Create the workspace-root `level-editor/` project, package scripts, Vercel config, and base app shell.
+2. Configure editor-owned Supabase env vars and password-based Supabase Auth for human editor login.
+3. Add owner bootstrap using server-only config such as `LEVEL_EDITOR_OWNER_USER_IDS` or `LEVEL_EDITOR_OWNER_EMAILS`.
+4. Add shared server auth helpers for `requireEditorSession()`, `requireOwner()`, `requireServiceToken(scope)`, and server-only Supabase access.
+5. Verification: owner can log in, non-owner editor can log in if manually provisioned, owner-only endpoints reject non-owner users, and unauthenticated requests are rejected.
 
-### Phase 3 — HomeScreen
-1. `src/lib/app/levels.js` (fetch home summary: all games + today's level + Start / See the result state per game)
-2. `GameCard.jsx` + `HomeScreen.jsx`
+### Phase 2 — Level Catalog Schema
+1. Write `level-editor/migrations/001_level_catalog_schema.sql`.
+2. Create `games`, `daily_levels`, `editor_assets`, `level_asset_refs`, and `editor_service_tokens`.
+3. Add immutable catalog helper `compute_level_number(launched_at, puzzle_date)` and ensure all catalog writes use persisted `level_number`.
+4. Seed the first `games` row for `word-guess` with version snapshots and `launched_at`.
+5. Verification: migrations apply cleanly in the editor-owned Supabase project; `compute_level_number()` returns #1 on launch date and rejects dates before launch; `mushy-game/migrations/001_mushy_game_schema.sql` does not define any catalog/token/asset tables.
 
-### Phase 4 — GameScreen + Timer + Ping
-1. `Timer.jsx`
-2. `api/sessions/enter.js` (unified session entry point — create/resume/prompt carryover)
-3. `src/lib/app/session.js` (enter / ping / complete wrappers — no direct DB writes)
-4. `api/sessions/ping.js`
-5. `GameScreen.jsx` (ping loop, reconnect logic, "How to play" dialog)
-6. `renderers/WordGuessRenderer.jsx` (first working game)
+### Phase 3 — Word-Guess Generator Data In Level-Editor
+1. Add `level-editor`'s local copy of the generator registry.
+2. Add `word-guess` generator, constants, seeded RNG, and generated committed word lists needed for preview/cron.
+3. Keep these copies aligned with the later Mushy Game generator copy; do not import generator files across the app boundary.
+4. Add a dev preview helper or route that can generate `word-guess` content for any date without writing.
+5. Verification: the same date seed always returns the same content; generated content passes the Wordle content invariants from `plan-wordle-v1.md`; changing generator output requires a `generator_version` bump.
 
-### Phase 5 — Completion + Result
-1. `api/sessions/complete.js` (streak + freeze bank computation)
-2. `api/stats/workspace.js` + `api/stats/global.js`
-3. `src/lib/app/stats.js`
-4. `ResultScreen.jsx` (time card + percentile cards + streak card)
+### Phase 4 — Level-Editor Level APIs And UI
+1. Implement calendar/upcoming-level UI in `level-editor/src/App.jsx`.
+2. Implement `/api/levels?gameId=&from=&to=`, `/api/levels/preview?gameId=&puzzleDate=`, `POST /api/levels`, `DELETE /api/levels?gameId=&puzzleDate=`, and `/api/levels/check-duplicate?gameId=&answer=`.
+3. Implement JSON fallback editing for any game type.
+4. Implement `WordGuessLevelEditor.jsx` with word length, max attempts, answer autocomplete, live preview, validation, and duplicate detection.
+5. Verification: editor can preview a generated future date, save a custom override, reload it, clear it, and see duplicate Wordle notices; invalid content blocks save.
 
-### Phase 6 — Polish & edge cases
-1. End-to-end disconnect recovery verification
-2. Design system pass (tokens, spacing, Vietnamese copy review)
-3. Edge cases: no completions yet in workspace, first-ever level, workspace < 10 members, player has no yesterday session (streak = 1), carryover skip on immediately previous UTC day, stale unresolved sessions
+### Phase 5 — Level-Editor Asset Workflow
+1. Implement `editor_assets` and `level_asset_refs` access through `level-editor/src/lib/editorAssets.js`.
+2. Implement `/api/assets`, `/api/assets/presign`, `/api/assets/:id/complete`, `/api/assets/:id`, and `/api/assets/view-url`.
+3. Store `imageObjectKey` in level content; never persist `publicUrl` or `imageAssetId` in level content.
+4. Resolve short-lived view URLs from `objectKey` only when preview/runtime display needs them.
+5. Verification: editor can upload, complete, preview, reuse, clear, archive, and hard-delete only unreferenced assets; saved levels keep object keys stable and old published levels remain renderable.
+
+### Phase 6 — Service Tokens And Runtime Catalog API
+1. Implement owner-only `ServiceTokensPanel`.
+2. Implement `GET /api/service-tokens`, `POST /api/service-tokens`, and `POST /api/service-tokens/:id/revoke`.
+3. Store only hashed/HMACed tokens in `editor_service_tokens`; show raw token exactly once.
+4. Implement service-token-authenticated runtime catalog endpoints: `GET /api/catalog/games?slug=&active=` and `GET /api/catalog/daily-level?gameSlug=&puzzleDate=`.
+5. Allow `asset:read` service tokens to call `/api/assets/view-url` only for object keys referenced by published levels.
+6. Verification: owner can create/revoke a token; raw token cannot be recovered after creation; revoked/expired/wrong-scope tokens fail; valid token can read active game metadata, today's published level bundle, and published asset view URLs.
+
+### Phase 7 — Level Catalog Cron
+1. Implement `level-editor/api/cron/generate-levels.js`.
+2. Add `level-editor/vercel.json` cron config.
+3. Cron iterates active games, calls the local generator copy, derives persisted `level_number` through the catalog helper, snapshots version fields, and uses `ON CONFLICT (game_id, puzzle_date) DO NOTHING`.
+4. Verification: cron can be run manually with `CRON_SECRET`; it inserts missing levels, skips custom overrides, returns per-game results, and never rewrites old/custom level content.
+
+### Phase 8 — Level-Editor End-To-End Acceptance
+1. Run through the full owner/editor workflow: login, create service token, generate preview, save custom Wordle level, upload/reuse image asset if applicable, run cron, read catalog with service token.
+2. Record the required Mushy Game env values: `LEVEL_EDITOR_API_BASE_URL` and `LEVEL_EDITOR_SERVICE_TOKEN`.
+3. Freeze the HTTP response shapes for `GET /api/catalog/games` and `GET /api/catalog/daily-level`.
+4. Verification: a standalone script or HTTP client can fetch the same catalog bundle Mushy Game will need, without any Mushy Game database or frontend code.
+
+### Phase 9 — Mushy Game Runtime Schema And Catalog Client
+1. Write `mushy-game/migrations/001_mushy_game_schema.sql` for `player_sessions` only.
+2. Add Mushy Game server helper for calling level-editor with `LEVEL_EDITOR_API_BASE_URL` and `LEVEL_EDITOR_SERVICE_TOKEN`.
+3. Implement `src/lib/app/levels.js` and `GET /api/games/home` using level-editor catalog APIs.
+4. Verification: HomeScreen data can be fetched from a real level-editor deployment; Mushy Game never queries the editor-owned Supabase database directly.
+
+### Phase 10 — Mushy Game Gameplay Runtime
+1. Implement `Timer.jsx`.
+2. Implement `api/sessions/enter.js`, `api/sessions/ping.js`, and `api/sessions/complete.js`.
+3. Implement `src/lib/app/session.js`.
+4. Implement `GameScreen.jsx` with ping loop, reconnect logic, and "How to play" dialog.
+5. Implement the first runtime `WordGuessRenderer.jsx`.
+6. Verification: player can start, resume, reconnect, complete, and reopen today's Wordle level using content fetched from level-editor.
+
+### Phase 11 — Result, Stats, And Polish
+1. Implement `api/stats/workspace.js`, `api/stats/global.js`, and `src/lib/app/stats.js`.
+2. Implement `ResultScreen.jsx` with score card, percentile cards, streak/freeze card, and game-specific answer reveal where applicable.
+3. Run end-to-end disconnect recovery, carryover, freeze-bank, stale-session, first-level, no-completion, and workspace-size edge cases.
+4. Verification: no individual global rows are exposed, workspace stats respect visibility, and all user-facing Vietnamese copy/design-system polish is reviewed.
 
 ---
 
@@ -1393,7 +1539,7 @@ export const generatorMetas = {
 };
 ```
 
-The level catalog cron (`level-editor/api/cron/generate-levels.js`) and the companion level-editor preview endpoint both look up `generators[game.slug]` — no changes needed in the generator itself once it is registered. The migration values inserted into the level catalog `games` table must match the `gameMeta` values in code; `daily_levels` stores version snapshots from the `games` row when cron or level-editor writes a level.
+The level catalog cron (`level-editor/api/cron/generate-levels.js`) and the companion level-editor preview endpoint both look up `generators[game.slug]` from the level-editor copy — no changes needed in that app once it is registered there. The migration values inserted into the level catalog `games` table must match the `gameMeta` values in code; `daily_levels` stores version snapshots from the `games` row when cron or level-editor writes a level.
 
 ---
 
@@ -1562,7 +1708,6 @@ All fields:
 
 ```ts
 type ImageAssetValue = {
-  imageAssetId: string | null;
   imageObjectKey: string | null;
   altText?: string | null;
 };
@@ -1572,9 +1717,9 @@ Implementation notes:
 - Use `level-editor/src/lib/editorAssets.js` as the only client helper for asset operations.
 - `editorAssets.js` calls the companion `level-editor` API routes (`/api/assets/*`); it must not import or modify `mushy-game/src/lib/storage.js`.
 - The field should offer both "Upload image" and "Choose existing" flows.
-- Upload flow: request `/api/assets/presign`, PUT the file to R2 using the returned URL, call `/api/assets/:id/complete`, then call `onChange({ imageAssetId, imageObjectKey, altText })`.
-- Choose-existing flow: list assets via `/api/assets`, then call `onChange(...)` with the selected asset's ID and object key. Use any returned `publicUrl` only for preview rendering.
-- Clear flow: call `onChange({ imageAssetId: null, imageObjectKey: null, altText: null })`; actual asset deletion/archive is managed by the asset library, not by the field.
+- Upload flow: request `/api/assets/presign`, PUT the file to R2 using the returned URL, call `/api/assets/:id/complete`, then call `onChange({ imageObjectKey, altText })`.
+- Choose-existing flow: list assets via `/api/assets`, then call `onChange(...)` with the selected asset's object key. Use any returned `publicUrl` only for preview rendering.
+- Clear flow: call `onChange({ imageObjectKey: null, altText: null })`; actual asset deletion/archive is managed by the asset library, not by the field.
 
 ---
 
@@ -1688,7 +1833,7 @@ Once Steps 1–4 above are done (Step 5 is optional), the following work automat
 |---|---|
 | Appears on HomeScreen | `is_active = true` in `games` row; `levels.js` fetches all active games |
 | Daily level auto-generated | Cron iterates all active games, looks up `generators[slug]` |
-| Companion level-editor preview + customise | The separate `level-editor` app calls the same generator + level-number logic with the date seed |
+| Companion level-editor preview + customise | The separate `level-editor` app calls its local copy of the generator with the date seed and uses the catalog schema helper for level numbering |
 | Resume badge on HomeScreen | `in_progress` session detected by `levels.js` |
 | Timer / no-timer header | `GameScreen` reads `game.has_timer` |
 | Disconnect recovery | Renderer restores from `gameState`; ping system is game-agnostic |
@@ -1719,3 +1864,4 @@ Once Steps 1–4 above are done (Step 5 is optional), the following work automat
 | 14 | Should a custom `LevelEditor` call `onValidate` on mount? | **Yes.** Editors must call `validate(content)` once on mount via `useEffect([], [])` so the companion app can disable Save before any user interaction if the initial content is already invalid. Use the pure `validate()` helper pattern — call it from both the mount effect and `update()`. See §17.6.2 and §17.6.4. |
 | 15 | Should `game_state` be cleared (`= null`) when a session is completed? | **No — it is preserved.** The completion endpoint does not touch `game_state`. The column retains the final puzzle state so that GameScreen (Case C in §4.4) can restore the completed board view and transition smoothly to ResultScreen. See §4.2, §4.4, §6.2, §10. |
 | 16 | When adding a new puzzle game, which version should be bumped? | **Usually none of the existing version columns.** Insert the new `games` row with `game_version = '1.0.0'`, `content_schema_version = 1`, `generator_version = 1`, and `rules_version = 1`. Bump the Mushy Game platform version only if the new game required platform/schema/API changes outside the normal plug-in flow. See §6.2 Versioning model and §17.2. |
+| 17 | How does Mushy Game read level-editor catalog data? | **Server-to-server HTTP with a custom service token.** `mushy-game/api/*` verifies the Mushy user/workspace normally, then calls `level-editor` runtime catalog endpoints using `LEVEL_EDITOR_SERVICE_TOKEN`. The token is created by a level-editor owner through the owner-only Service Tokens UI, stored only in Mushy Game backend env vars, and is not a Supabase Auth user/session token. See §6.2 and §10. |

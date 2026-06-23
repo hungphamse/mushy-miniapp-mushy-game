@@ -289,7 +289,7 @@ scripts/wordlist-sources/
 
 **Files:**
 - `src/lib/generators/word-guess.js` — generator function
-- `src/lib/generators/word-guess-constants.js` — exports `MIN_WORD_LENGTH = 4` and `MAX_WORD_LENGTH = 8`; reused by both the generator and the companion `WordGuessLevelEditor` so the values are never duplicated
+- `src/lib/generators/word-guess-constants.js` — exports `MIN_WORD_LENGTH = 4` and `MAX_WORD_LENGTH = 8`; duplicate this file into `level-editor/` and keep both copies aligned
 
 The generator accepts an optional `options` object to fix a specific word length. When called by the cron without options, it picks a word length randomly (but deterministically from the seed) within the supported range of **4 to 8**.
 
@@ -297,8 +297,8 @@ The generator accepts an optional `options` object to fix a specific word length
 import { seededRandom } from '../utils/random.js'; // mulberry32 — see plan-mushy-game.md §5.3
 import { ANSWER_LISTS } from '../data/wordLists.js';
 
-// Shared constants — imported from src/lib/generators/word-guess-constants.js
-// (also reused by WordGuessLevelEditor to avoid duplicating magic numbers)
+// Constants are duplicated into level-editor for WordGuessLevelEditor.
+// Keep both app copies aligned when changing supported lengths.
 import { MIN_WORD_LENGTH, MAX_WORD_LENGTH } from './word-guess-constants.js';
 
 /**
@@ -745,7 +745,7 @@ function getSuggestions(input) {
   return [...prefix, ...substring].slice(0, 8);
 }
 
-// Shared constants — same file imported by the generator to avoid duplicating magic numbers
+// Constants are duplicated in level-editor; keep this local copy aligned with the Mushy Game generator copy.
 import { MIN_WORD_LENGTH } from '../../lib/generators/word-guess-constants.js';
 
 // Duplicate detection: fires 2 seconds after the editor stops editing the answer field.
