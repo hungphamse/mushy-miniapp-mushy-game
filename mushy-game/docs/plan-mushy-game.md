@@ -245,6 +245,24 @@ workspace-root/
             └── generate-levels.js      ← inserts daily_levels into the level catalog DB
 ```
 
+### 3.3 Companion `level-editor` UI Standards
+
+The companion editor uses the title **Mushy Game Level Editor**. Keep it compact enough to fit on one line in the hero/header.
+
+Visual direction:
+- Follow the Mushy miniapp template in `mushy-game/src/lib/theme.css` for brand feel: red/pink accents, compact rounded cards, clear status pills, and mobile-friendly spacing.
+- Do not import source files from `mushy-game/`; duplicate or recreate needed editor-local styling so the sibling apps stay deployable independently.
+- Navigation sections such as Levels, Assets, and Service Tokens must be visually connected to their active content panel. Prefer left-side connected tabs on desktop and top-connected tabs on mobile.
+
+Environment mode:
+- Every non-production editor build must visibly identify itself as `Development editor` or `Preview editor` in the UI.
+- Local Vite development falls back to `development`; Vercel deployments use `VERCEL_ENV`.
+- Production may show a calmer `Production` badge, but development/preview must be more prominent so editors know which Supabase/R2 targets they are touching before future write APIs exist.
+
+Tracking:
+- `.agents/PLAN.md` is the living task bulletin and checkpoint file for agentic implementation.
+- This document and `docs/plan-wordle-v1.md` remain the design/vision references.
+
 The companion project is not a screen inside Mushy Game. It is a sibling web app, separate deployment, and separate Supabase project. Its database migrations are separate from `mushy-game/migrations/`.
 
 `level-editor/migrations/001_level_catalog_schema.sql` is the **daily level schema file**. It owns:

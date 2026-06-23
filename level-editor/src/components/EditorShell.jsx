@@ -42,7 +42,7 @@ const SECTIONS = [
   },
 ];
 
-export function EditorShell({ session, signingOut, user, onSignOut }) {
+export function EditorShell({ runtimeMode, session, signingOut, user, onSignOut }) {
   const [activeSectionId, setActiveSectionId] = useState(SECTIONS[0].id);
   const activeSection = SECTIONS.find((section) => section.id === activeSectionId) || SECTIONS[0];
 
@@ -63,39 +63,44 @@ export function EditorShell({ session, signingOut, user, onSignOut }) {
           {session?.expires_at && (
             <small>Session expires {new Date(session.expires_at * 1000).toLocaleString()}</small>
           )}
+          {!runtimeMode.isProduction && (
+            <em>{runtimeMode.label}: verify Supabase/R2 targets before saving future content.</em>
+          )}
           <button className="button secondary" disabled={signingOut} onClick={onSignOut}>
             {signingOut ? 'Signing out...' : 'Sign out'}
           </button>
         </div>
       </header>
 
-      <nav className="shell-tabs" aria-label="Editor sections">
-        {SECTIONS.map((section) => (
-          <button
-            aria-pressed={section.id === activeSection.id}
-            className={`shell-tab ${section.id === activeSection.id ? 'active' : ''}`}
-            key={section.id}
-            onClick={() => setActiveSectionId(section.id)}
-            type="button"
-          >
-            <span>{section.kicker}</span>
-            {section.label}
-          </button>
-        ))}
-      </nav>
-
-      <article className="shell-panel">
-        <div>
-          <p className="eyebrow">{activeSection.kicker}</p>
-          <h3>{activeSection.title}</h3>
-          <p>{activeSection.description}</p>
-        </div>
-        <ul className="panel-task-list">
-          {activeSection.tasks.map((task) => (
-            <li key={task}>{task}</li>
+      <div className="shell-workspace">
+        <nav className="shell-tabs" aria-label="Editor sections">
+          {SECTIONS.map((section) => (
+            <button
+              aria-pressed={section.id === activeSection.id}
+              className={`shell-tab ${section.id === activeSection.id ? 'active' : ''}`}
+              key={section.id}
+              onClick={() => setActiveSectionId(section.id)}
+              type="button"
+            >
+              <span>{section.kicker}</span>
+              {section.label}
+            </button>
           ))}
-        </ul>
-      </article>
+        </nav>
+
+        <article className="shell-panel">
+          <div>
+            <p className="eyebrow">{activeSection.kicker}</p>
+            <h3>{activeSection.title}</h3>
+            <p>{activeSection.description}</p>
+          </div>
+          <ul className="panel-task-list">
+            {activeSection.tasks.map((task) => (
+              <li key={task}>{task}</li>
+            ))}
+          </ul>
+        </article>
+      </div>
     </section>
   );
 }

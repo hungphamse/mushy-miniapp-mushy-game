@@ -77,6 +77,7 @@ If the player exhausts all `maxAttempts` without guessing correctly:
 - Result screen integration (attempts score, percentile, streak)
 - Companion `level-editor` preview + override
 - Companion `level-editor` UI with answer autocomplete (SCOWL-35, cross-length) and duplicate level detection
+- Companion `level-editor` UI follows the global editor UI standards in `plan-mushy-game.md §3.3`, including visible development/preview mode.
 
 ### Out of Scope (V1)
 - Hard mode (guesses must reuse confirmed letters)

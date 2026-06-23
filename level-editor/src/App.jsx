@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { getConfigStatus } from './lib/env.js';
+import { getConfigStatus, getRuntimeMode } from './lib/env.js';
 import { isOwnerUser } from './lib/owner.js';
 import { useAuthSession } from './lib/useAuthSession.js';
 import { signInWithPassword, signOut } from './lib/supabaseClient.js';
@@ -13,6 +13,7 @@ const INITIAL_FORM = {
 
 export default function App() {
   const configStatus = getConfigStatus();
+  const runtimeMode = getRuntimeMode();
   const { session, user, loading, error: sessionError } = useAuthSession(configStatus.ready);
   const [form, setForm] = useState(INITIAL_FORM);
   const [authError, setAuthError] = useState('');
@@ -54,9 +55,12 @@ export default function App() {
         <section className="hero">
           <div>
             <p className="eyebrow">Configuration required</p>
-            <h1>Mushy Level Editor</h1>
+            <h1 className="hero-title">Mushy Game Level Editor</h1>
             <p>Add the missing environment variables before starting the editor.</p>
           </div>
+          <span className={`mode-pill ${runtimeMode.isProduction ? 'production' : 'development'}`}>
+            {runtimeMode.label}
+          </span>
         </section>
         <section className="card" style={{ marginTop: 22 }}>
           <h2>Missing env vars</h2>
@@ -82,17 +86,23 @@ export default function App() {
       <section className="hero">
         <div>
           <p className="eyebrow">Owner workspace</p>
-          <h1>Mushy Level Editor</h1>
+          <h1 className="hero-title">Mushy Game Level Editor</h1>
           <p>
             Author daily levels, prepare asset object keys, and manage runtime access for the
             Mushy game catalog.
           </p>
         </div>
-        <span className="session-pill">{user ? user.email : 'Signed out'}</span>
+        <div className="hero-badges">
+          <span className={`mode-pill ${runtimeMode.isProduction ? 'production' : 'development'}`}>
+            {runtimeMode.label}
+          </span>
+          <span className="session-pill">{user ? user.email : 'Signed out'}</span>
+        </div>
       </section>
 
       {isOwner && (
         <EditorShell
+          runtimeMode={runtimeMode}
           session={session}
           signingOut={submitting}
           user={user}

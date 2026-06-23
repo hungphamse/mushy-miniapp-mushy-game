@@ -31,3 +31,10 @@ npm run dev
 - Future HTTP APIs must enforce owner checks on the server with server-only env vars.
 - Do not use Supabase `user_metadata` for owner authorization.
 - Runtime Mushy Game access will use custom service tokens, not editor user/password sessions.
+
+## UI Notes
+
+- The app title is `Mushy Game Level Editor`.
+- The visual baseline follows the Mushy miniapp template: compact hero title, red/pink brand accents, rounded cards, and connected section navigation.
+- Local development and Vercel preview builds show a visible non-production mode badge. Production builds show `Production`.
+- `VERCEL_ENV` is injected automatically on Vercel; local Vite runs fall back to `development`.
