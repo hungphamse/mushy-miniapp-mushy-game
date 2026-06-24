@@ -269,6 +269,7 @@ Editor-owned Supabase environment separation:
 Level numbering:
 - Each game row in the editor-owned catalog has a `launch_date`.
 - Level `001` for a game is its launch-date puzzle, not a workspace-wide or platform-wide calendar date.
+- The initial `word-guess` seed uses `now()::date`, so its launch date is the migration application date in each editor-owned Supabase project.
 - The editor-owned database assigns stored `daily_levels.level_number` from `games.launch_date` through a trigger. Backend apps read the persisted number and must not duplicate numbering logic.
 - A game launch date must not change after daily levels exist because it would invalidate already-stored level numbers.
 

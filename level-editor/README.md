@@ -33,6 +33,7 @@ npm run dev
 - There is no automatic dev schema creation for the level-editor database.
 - Use separate Supabase projects for dev/staging and production, with Vercel env vars pointing each deployment to the correct project.
 - Each game has its own `launch_date`; the editor-owned database assigns `daily_levels.level_number` from that launch date so level `001` can be the first launch-day puzzle for every game.
+- The seeded `word-guess` launch date uses `now()::date`, so level `001` is based on the date this migration is applied in that Supabase project.
 - Confirm each seeded game's `launch_date` before applying the migration to production.
 
 ## Security Notes

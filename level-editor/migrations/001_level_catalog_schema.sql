@@ -33,7 +33,7 @@ create table public.games (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint games_slug_format check (slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
-  constraint games_launch_date_valid check (launch_date >= date '2020-01-01'),
+  constraint games_launch_date_valid check (launch_date >= now()::date),
   constraint games_status_check check (status in ('active', 'inactive', 'archived')),
   constraint games_score_direction_check check (score_direction in ('asc', 'desc') or score_direction is null)
 );
@@ -41,6 +41,9 @@ create table public.games (
 comment on table public.games is
   'Editor-owned catalog of puzzle games exposed to Mushy Game through level-editor HTTP APIs.';
 
+-- The seeded Word Guess launch date intentionally uses now()::date so applying
+-- this migration defines level 001 as the migration application date for that
+-- editor-owned Supabase project.
 insert into public.games (
   slug,
   display_name,
@@ -57,7 +60,7 @@ insert into public.games (
   'Wordle-style daily word guessing game.',
   'ion:text-outline',
   'active',
-  date '2026-06-24',
+  now()::date,
   false,
   'asc',
   'v1'
