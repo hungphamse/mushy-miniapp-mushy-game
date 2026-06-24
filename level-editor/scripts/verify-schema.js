@@ -17,8 +17,14 @@ const requiredSnippets = [
   'Re-running the migration keeps',
   'create table if not exists public.daily_levels',
   'level_number integer not null',
+  'content_hash text null',
   'create or replace function public.set_daily_level_number',
   'new.level_number = public.compute_level_number(new.puzzle_date, game_launch_date)',
+  'create or replace function public.set_daily_level_content_hash',
+  "new.content_hash = encode(extensions.digest(new.content::text, 'sha256'), 'hex')",
+  'drop trigger if exists daily_levels_set_content_hash',
+  'create trigger daily_levels_set_content_hash',
+  'where content_hash is distinct from encode(extensions.digest(content::text,',
   'create or replace function public.prevent_game_launch_date_change',
   'create trigger games_prevent_launch_date_change',
   'create trigger daily_levels_set_level_number',
@@ -38,6 +44,7 @@ const requiredSnippets = [
   'alter table public.editor_service_tokens enable row level security',
   'revoke all on table public.editor_service_tokens from anon, authenticated',
   'revoke all on function public.set_daily_level_number() from public, anon, authenticated',
+  'revoke all on function public.set_daily_level_content_hash() from public, anon, authenticated',
   'revoke all on function public.prevent_game_launch_date_change() from public, anon, authenticated',
 ];
 
@@ -46,6 +53,8 @@ const forbiddenSnippets = [
   'level_number integer generated always as',
   'compute_level_number(puzzle_date)',
   'launch_date = excluded.launch_date',
+  'encode(digest(new.content::text',
+  'encode(digest(content::text',
 ];
 
 const missing = requiredSnippets.filter((snippet) => !sql.includes(snippet));

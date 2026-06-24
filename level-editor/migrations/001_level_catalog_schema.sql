@@ -101,6 +101,8 @@ comment on table public.daily_levels is
   'Published and draft daily levels. level_number is stored from the editor-owned schema, not computed by application code.';
 comment on column public.daily_levels.level_number is
   'Stored value assigned by set_daily_level_number() from the game launch date. Mushy Game reads this value from level bundles.';
+comment on column public.daily_levels.content_hash is
+  'SHA-256 hex digest of daily_levels.content, maintained automatically by a trigger.';
 
 create table if not exists public.editor_assets (
   id uuid primary key default gen_random_uuid(),
@@ -226,6 +228,19 @@ begin
 end;
 $$;
 
+create or replace function public.set_daily_level_content_hash()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.content_hash = encode(extensions.digest(new.content::text, 'sha256'), 'hex');
+  return new;
+end;
+$$;
+
+comment on function public.set_daily_level_content_hash() is
+  'Maintains a SHA-256 hex digest of the canonical jsonb content payload. jsonb normalizes object-key order and whitespace, so semantically equivalent content hashes the same.';
+
 create or replace function public.prevent_game_launch_date_change()
 returns trigger
 language plpgsql
@@ -260,6 +275,15 @@ create trigger daily_levels_set_level_number
 before insert or update of game_id, puzzle_date on public.daily_levels
 for each row execute function public.set_daily_level_number();
 
+drop trigger if exists daily_levels_set_content_hash on public.daily_levels;
+create trigger daily_levels_set_content_hash
+before insert or update on public.daily_levels
+for each row execute function public.set_daily_level_content_hash();
+
+update public.daily_levels
+   set content_hash = encode(extensions.digest(content::text, 'sha256'), 'hex')
+ where content_hash is distinct from encode(extensions.digest(content::text, 'sha256'), 'hex');
+
 drop trigger if exists daily_levels_set_updated_at on public.daily_levels;
 create trigger daily_levels_set_updated_at
 before update on public.daily_levels
@@ -284,4 +308,5 @@ revoke all on table public.editor_service_tokens from anon, authenticated;
 revoke all on function public.compute_level_number(date, date) from public, anon, authenticated;
 revoke all on function public.set_updated_at() from public, anon, authenticated;
 revoke all on function public.set_daily_level_number() from public, anon, authenticated;
+revoke all on function public.set_daily_level_content_hash() from public, anon, authenticated;
 revoke all on function public.prevent_game_launch_date_change() from public, anon, authenticated;

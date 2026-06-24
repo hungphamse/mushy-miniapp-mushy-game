@@ -61,6 +61,7 @@ Build the standalone `level-editor/` first as the owner/editor surface for autho
 - Level numbering is anchored to each game row's `launch_date`; the database trigger assigns stored `daily_levels.level_number`, so every game can launch with level `001`.
 - The seeded `word-guess` launch date uses `now()::date`, so its level `001` is based on the date the migration is applied in each editor-owned Supabase project.
 - Migration idempotency checkpoint: table/index creation is guarded, triggers are recreated safely, and reruns preserve the existing `word-guess.launch_date`.
+- Content hash checkpoint: `daily_levels.content_hash` is maintained by a database trigger using a SHA-256 digest of canonical `jsonb` content and backfilled on migration reruns.
 - Cron/backfill checkpoint: after applying the migration, manually call the idempotent generate-levels endpoint for the launch date so level `001` exists even if the scheduled cron already passed.
 - Schema separation rule: apply migrations manually to separate editor-owned Supabase projects for dev/staging and production; do not expect Mushy miniapp-style automatic dev schema creation.
 - Verification: `npm run schema:verify`, `npm run build`, and `npm audit` pass in `level-editor/`.
