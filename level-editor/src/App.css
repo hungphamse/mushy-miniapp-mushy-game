@@ -136,16 +136,6 @@ button:disabled {
   white-space: nowrap;
 }
 
-.account-label {
-  margin: 0 0 3px;
-  color: var(--muted-v3);
-  font-family: var(--font-display);
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
 .account-diagnostics {
   grid-column: 1 / -1;
   display: flex;

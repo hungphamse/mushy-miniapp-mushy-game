@@ -252,13 +252,25 @@ The companion editor uses the title **Mushy Game Level Editor**. Keep it compact
 Visual direction:
 - Follow the Mushy miniapp template in `mushy-game/src/lib/theme.css` for brand feel: red/pink accents, compact rounded cards, clear status pills, and mobile-friendly spacing.
 - Do not import source files from `mushy-game/`; duplicate or recreate needed editor-local styling so the sibling apps stay deployable independently.
-- Keep authenticated editor chrome compact. The top area should be one header with a single `Account management` block on the right, not separate hero/account cards that push the interactive editor below the fold.
+- Keep authenticated editor chrome compact. The top area should be one header with a single account block on the right, not separate hero/account cards that push the interactive editor below the fold.
 - Navigation sections such as Levels, Assets, and Service Tokens must be visually connected to their active content panel. Prefer left-side connected tabs on desktop and top-connected tabs on mobile.
 
 Environment mode:
 - Every non-production editor build must visibly identify itself as `Development editor` or `Preview editor` in the UI.
 - Local Vite development falls back to `development`; Vercel deployments use `VERCEL_ENV`.
 - Production must not show a mode badge, account user ID, or session-expiry diagnostics. Development/preview show these diagnostics so editors know which Supabase/R2 targets they are touching before future write APIs exist.
+
+Editor-owned Supabase environment separation:
+- The level-editor database does not use Mushy miniapp-style automatic dev schema creation.
+- Use separate editor-owned Supabase projects for dev/staging and production, or an explicit Supabase Branching workflow if adopted later.
+- Apply the same `level-editor/migrations/` files to each project deliberately, starting with dev/staging and then production.
+- Vercel environment variables decide which editor-owned Supabase project a deployment talks to; the UI mode label is only a warning, not data separation.
+
+Level numbering:
+- Each game row in the editor-owned catalog has a `launch_date`.
+- Level `001` for a game is its launch-date puzzle, not a workspace-wide or platform-wide calendar date.
+- The editor-owned database assigns stored `daily_levels.level_number` from `games.launch_date` through a trigger. Backend apps read the persisted number and must not duplicate numbering logic.
+- A game launch date must not change after daily levels exist because it would invalidate already-stored level numbers.
 
 Tracking:
 - `.agents/PLAN.md` is the living task bulletin and checkpoint file for agentic implementation.

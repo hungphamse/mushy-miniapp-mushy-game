@@ -25,6 +25,16 @@ npm install
 npm run dev
 ```
 
+## Schema Workflow
+
+- Schema migrations live in `migrations/`.
+- Run `npm run schema:verify` before applying a migration to an editor-owned Supabase project.
+- Apply migrations manually to the intended editor-owned Supabase project.
+- There is no automatic dev schema creation for the level-editor database.
+- Use separate Supabase projects for dev/staging and production, with Vercel env vars pointing each deployment to the correct project.
+- Each game has its own `launch_date`; the editor-owned database assigns `daily_levels.level_number` from that launch date so level `001` can be the first launch-day puzzle for every game.
+- Confirm each seeded game's `launch_date` before applying the migration to production.
+
 ## Security Notes
 
 - The Vite owner allowlist is client-visible and only protects the UI.
@@ -36,7 +46,7 @@ npm run dev
 
 - The app title is `Mushy Game Level Editor`.
 - The visual baseline follows the Mushy miniapp template: compact hero title, red/pink brand accents, rounded cards, and connected section navigation.
-- Authenticated views use one compact top header with a single `Account management` block on the right; do not duplicate account/email cards above the interactive editor area.
+- Authenticated views use one compact top header with a single account block on the right; do not duplicate account/email cards above the interactive editor area.
 - Local development and Vercel preview builds show a visible non-production mode badge.
 - Production builds do not show a mode badge, user ID, or session expiry diagnostics.
 - `VERCEL_ENV` is injected automatically on Vercel; local Vite runs fall back to `development`.

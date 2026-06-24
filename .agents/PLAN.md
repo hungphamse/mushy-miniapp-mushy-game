@@ -37,23 +37,30 @@ Build the standalone `level-editor/` first as the owner/editor surface for autho
 - Review polish applied: title is `Mushy Game Level Editor`, non-production mode is visible in dev/preview only, production hides user ID/session diagnostics, the authenticated header is compact with one account management block, section tabs are visually connected to their panel, and styling follows the Mushy miniapp template direction.
 
 ## Milestone 2 — Editor-Owned Database Schema
-- [ ] `LE-010` Add the `games` table and seed the `word-guess` game.
+- [x] `LE-010` Add the `games` table and seed the `word-guess` game.
   Done when: the editor database has one canonical game row for Wordle-style levels.
 
-- [ ] `LE-011` Add immutable level numbering support.
+- [x] `LE-011` Add immutable level numbering support.
   Done when: `compute_level_number()` exists in the editor-owned schema and `daily_levels.level_number` is stored, not computed by app code.
 
-- [ ] `LE-012` Add the `daily_levels` table.
+- [x] `LE-012` Add the `daily_levels` table.
   Done when: levels can store date, game key/id, level number, generated/custom source, content JSON, and publish state.
 
-- [ ] `LE-013` Add asset metadata tables.
+- [x] `LE-013` Add asset metadata tables.
   Done when: asset records store `object_key`, metadata, ownership/audit fields, and level references without storing persistent public URLs.
 
-- [ ] `LE-014` Add service-token storage.
+- [x] `LE-014` Add service-token storage.
   Done when: `editor_service_tokens` can store hashed tokens, scopes, labels, created/revoked metadata, and no raw token.
 
-- [ ] `LE-015` Add schema verification checks.
+- [x] `LE-015` Add schema verification checks.
   Done when: a local verification command confirms required tables, constraints, and seed data exist.
+
+### Milestone 2 Checkpoint
+- Added `level-editor/migrations/001_level_catalog_schema.sql`.
+- Added `npm run schema:verify` for migration structure checks.
+- Level numbering is anchored to each game row's `launch_date`; the database trigger assigns stored `daily_levels.level_number`, so every game can launch with level `001`.
+- Schema separation rule: apply migrations manually to separate editor-owned Supabase projects for dev/staging and production; do not expect Mushy miniapp-style automatic dev schema creation.
+- Verification: `npm run schema:verify`, `npm run build`, and `npm audit` pass in `level-editor/`.
 
 ## Milestone 3 — Word-Guess Generator Support
 - [ ] `LE-020` Duplicate Wordle constants into `level-editor/`.

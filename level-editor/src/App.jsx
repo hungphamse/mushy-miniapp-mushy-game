@@ -233,7 +233,6 @@ function AccountManagement({ runtimeMode, session, signingOut, user, onSignOut }
   return (
     <aside className="account-management" aria-label="Account management">
       <div>
-        <p className="account-label">Account management</p>
         <strong>{user.email}</strong>
       </div>
       {runtimeMode.isNonProduction && (
