@@ -35,6 +35,8 @@ npm run dev
 - Each game has its own `launch_date`; the editor-owned database assigns `daily_levels.level_number` from that launch date so level `001` can be the first launch-day puzzle for every game.
 - The seeded `word-guess` launch date uses `now()::date`, so level `001` is based on the date this migration is applied in that Supabase project.
 - Confirm each seeded game's `launch_date` before applying the migration to production.
+- The migration is intended to be re-runnable: table/index creation is guarded, triggers are recreated, and the `word-guess` seed keeps its original launch date on conflict.
+- After applying the migration, manually call the level-generation cron/backfill endpoint for the launch date so level `001` exists even if the scheduled cron already passed.
 
 ## Security Notes
 

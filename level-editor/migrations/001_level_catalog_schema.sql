@@ -19,7 +19,7 @@ $$;
 comment on function public.compute_level_number(date, date) is
   'Immutable V1 daily level numbering from a game launch date. Do not duplicate this logic in app backends.';
 
-create table public.games (
+create table if not exists public.games (
   id uuid primary key default gen_random_uuid(),
   slug text not null unique,
   display_name text not null,
@@ -33,7 +33,7 @@ create table public.games (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint games_slug_format check (slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
-  constraint games_launch_date_valid check (launch_date >= now()::date),
+  constraint games_launch_date_valid check (launch_date >= date '2020-01-01'),
   constraint games_status_check check (status in ('active', 'inactive', 'archived')),
   constraint games_score_direction_check check (score_direction in ('asc', 'desc') or score_direction is null)
 );
@@ -42,8 +42,9 @@ comment on table public.games is
   'Editor-owned catalog of puzzle games exposed to Mushy Game through level-editor HTTP APIs.';
 
 -- The seeded Word Guess launch date intentionally uses now()::date so applying
--- this migration defines level 001 as the migration application date for that
--- editor-owned Supabase project.
+-- this migration the first time defines level 001 as the migration application
+-- date for that editor-owned Supabase project. Re-running the migration keeps
+-- the existing launch_date so the seed stays idempotent.
 insert into public.games (
   slug,
   display_name,
@@ -69,13 +70,12 @@ insert into public.games (
   description = excluded.description,
   icon = excluded.icon,
   status = excluded.status,
-  launch_date = excluded.launch_date,
   has_timer = excluded.has_timer,
   score_direction = excluded.score_direction,
   generator_version = excluded.generator_version,
   updated_at = now();
 
-create table public.daily_levels (
+create table if not exists public.daily_levels (
   id uuid primary key default gen_random_uuid(),
   game_id uuid not null references public.games(id) on delete restrict,
   puzzle_date date not null,
@@ -102,7 +102,7 @@ comment on table public.daily_levels is
 comment on column public.daily_levels.level_number is
   'Stored value assigned by set_daily_level_number() from the game launch date. Mushy Game reads this value from level bundles.';
 
-create table public.editor_assets (
+create table if not exists public.editor_assets (
   id uuid primary key default gen_random_uuid(),
   object_key text not null unique,
   filename text null,
@@ -132,7 +132,7 @@ comment on table public.editor_assets is
 comment on column public.editor_assets.object_key is
   'Canonical asset reference stored in level content fields such as imageObjectKey. Never persist public URLs.';
 
-create table public.level_asset_refs (
+create table if not exists public.level_asset_refs (
   id uuid primary key default gen_random_uuid(),
   asset_id uuid not null references public.editor_assets(id) on delete cascade,
   daily_level_id uuid null references public.daily_levels(id) on delete cascade,
@@ -148,7 +148,7 @@ create table public.level_asset_refs (
 comment on table public.level_asset_refs is
   'References from saved level JSON paths to editor asset object keys. level_id is optional cross-project metadata and is not a foreign key.';
 
-create table public.editor_service_tokens (
+create table if not exists public.editor_service_tokens (
   id uuid primary key default gen_random_uuid(),
   label text not null,
   token_hash text not null unique,
@@ -172,23 +172,23 @@ comment on table public.editor_service_tokens is
 comment on column public.editor_service_tokens.token_hash is
   'Hash/HMAC of the raw token. The raw token is shown once by owner-only APIs and is not persisted.';
 
-create index daily_levels_game_date_status_idx
+create index if not exists daily_levels_game_date_status_idx
   on public.daily_levels (game_id, puzzle_date, publish_status);
-create index daily_levels_game_level_number_idx
+create index if not exists daily_levels_game_level_number_idx
   on public.daily_levels (game_id, level_number);
-create index editor_assets_status_created_idx
+create index if not exists editor_assets_status_created_idx
   on public.editor_assets (status, created_at desc);
-create index editor_assets_game_slug_idx
+create index if not exists editor_assets_game_slug_idx
   on public.editor_assets (game_slug) where game_slug is not null;
-create index editor_assets_tags_idx
+create index if not exists editor_assets_tags_idx
   on public.editor_assets using gin (tags);
-create index level_asset_refs_level_idx
+create index if not exists level_asset_refs_level_idx
   on public.level_asset_refs (game_slug, puzzle_date);
-create index level_asset_refs_asset_idx
+create index if not exists level_asset_refs_asset_idx
   on public.level_asset_refs (asset_id);
-create index editor_service_tokens_active_idx
+create index if not exists editor_service_tokens_active_idx
   on public.editor_service_tokens (revoked_at, expires_at);
-create index editor_service_tokens_scopes_idx
+create index if not exists editor_service_tokens_scopes_idx
   on public.editor_service_tokens using gin (scopes);
 
 create or replace function public.set_updated_at()
@@ -245,22 +245,27 @@ begin
 end;
 $$;
 
+drop trigger if exists games_set_updated_at on public.games;
 create trigger games_set_updated_at
 before update on public.games
 for each row execute function public.set_updated_at();
 
+drop trigger if exists games_prevent_launch_date_change on public.games;
 create trigger games_prevent_launch_date_change
 before update of launch_date on public.games
 for each row execute function public.prevent_game_launch_date_change();
 
+drop trigger if exists daily_levels_set_level_number on public.daily_levels;
 create trigger daily_levels_set_level_number
 before insert or update of game_id, puzzle_date on public.daily_levels
 for each row execute function public.set_daily_level_number();
 
+drop trigger if exists daily_levels_set_updated_at on public.daily_levels;
 create trigger daily_levels_set_updated_at
 before update on public.daily_levels
 for each row execute function public.set_updated_at();
 
+drop trigger if exists editor_assets_set_updated_at on public.editor_assets;
 create trigger editor_assets_set_updated_at
 before update on public.editor_assets
 for each row execute function public.set_updated_at();
