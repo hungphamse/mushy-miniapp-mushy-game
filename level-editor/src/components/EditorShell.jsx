@@ -42,38 +42,12 @@ const SECTIONS = [
   },
 ];
 
-export function EditorShell({ runtimeMode, session, signingOut, user, onSignOut }) {
+export function EditorShell() {
   const [activeSectionId, setActiveSectionId] = useState(SECTIONS[0].id);
   const activeSection = SECTIONS.find((section) => section.id === activeSectionId) || SECTIONS[0];
 
   return (
     <section className="editor-shell" aria-label="Level editor workspace">
-      <header className="shell-header">
-        <div>
-          <p className="eyebrow">Milestone 1 shell</p>
-          <h2>Editor workspace</h2>
-          <p>
-            The authenticated owner shell is ready. Future milestones can replace each placeholder
-            panel independently without changing the login flow.
-          </p>
-        </div>
-        <div className="shell-account">
-          <strong>{user.email}</strong>
-          {runtimeMode.isNonProduction && (
-            <span>{user.id}</span>
-          )}
-          {runtimeMode.isNonProduction && session?.expires_at && (
-            <small>Session expires {new Date(session.expires_at * 1000).toLocaleString()}</small>
-          )}
-          {runtimeMode.isNonProduction && (
-            <em>{runtimeMode.label}: verify Supabase/R2 targets before saving future content.</em>
-          )}
-          <button className="button secondary" disabled={signingOut} onClick={onSignOut}>
-            {signingOut ? 'Signing out...' : 'Sign out'}
-          </button>
-        </div>
-      </header>
-
       <div className="shell-workspace">
         <nav className="shell-tabs" aria-label="Editor sections">
           {SECTIONS.map((section) => (

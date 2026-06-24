@@ -60,15 +60,15 @@ button:disabled {
 .page {
   width: min(1120px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 34px 0 52px;
+  padding: 24px 0 52px;
 }
 
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 18px;
+  gap: 16px;
   align-items: center;
-  padding: 20px;
+  padding: 16px 18px;
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
   background: var(--surface);
@@ -90,7 +90,7 @@ button:disabled {
   max-width: 780px;
   color: var(--ink);
   font-family: var(--font-display);
-  font-size: clamp(1.45rem, 4vw, 2rem);
+  font-size: clamp(1.35rem, 3vw, 1.85rem);
   font-weight: 800;
   line-height: 1.12;
   letter-spacing: -0.04em;
@@ -98,18 +98,62 @@ button:disabled {
 }
 
 .hero p {
-  max-width: 660px;
+  max-width: 620px;
   margin: 8px 0 0;
   color: var(--muted);
   font-size: 0.92rem;
-  line-height: 1.55;
+  line-height: 1.5;
 }
 
 .hero-badges {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
   justify-content: flex-end;
+}
+
+.account-management {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 14px;
+  align-items: center;
+  min-width: min(380px, 100%);
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface-muted);
+  text-align: left;
+}
+
+.account-management strong {
+  display: block;
+  max-width: 250px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.92rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-label {
+  margin: 0 0 3px;
+  color: var(--muted-v3);
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.account-diagnostics {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
 }
 
 .mode-pill,
@@ -295,10 +339,9 @@ button:disabled {
 .editor-shell {
   display: grid;
   gap: 18px;
-  margin-top: 22px;
+  margin-top: 16px;
 }
 
-.shell-header,
 .shell-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -311,7 +354,6 @@ button:disabled {
   box-shadow: var(--shadow-card);
 }
 
-.shell-header h2,
 .shell-panel h3 {
   margin: 0;
   font-size: clamp(1.7rem, 3vw, 2.55rem);
@@ -320,39 +362,10 @@ button:disabled {
   font-family: var(--font-display);
 }
 
-.shell-header p,
 .shell-panel p {
   max-width: 660px;
   color: var(--muted);
   line-height: 1.65;
-}
-
-.shell-account {
-  display: grid;
-  justify-items: end;
-  gap: 8px;
-  min-width: min(320px, 100%);
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background: var(--surface-muted);
-  text-align: right;
-}
-
-.shell-account span,
-.shell-account small,
-.shell-account em {
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 0.76rem;
-  overflow-wrap: anywhere;
-}
-
-.shell-account em {
-  max-width: 280px;
-  color: #92400e;
-  font-style: normal;
-  line-height: 1.45;
 }
 
 .shell-workspace {
@@ -459,7 +472,6 @@ button:disabled {
 
   .hero,
   .grid,
-  .shell-header,
   .shell-panel,
   .shell-workspace {
     grid-template-columns: 1fr;
@@ -467,7 +479,6 @@ button:disabled {
 
   .hero,
   .card,
-  .shell-header,
   .shell-panel {
     border-radius: 22px;
     padding: 20px;
@@ -481,9 +492,8 @@ button:disabled {
     justify-content: flex-start;
   }
 
-  .shell-account {
-    justify-items: start;
-    text-align: left;
+  .account-management {
+    width: 100%;
   }
 
   .shell-tabs {

@@ -34,7 +34,7 @@ Build the standalone `level-editor/` first as the owner/editor surface for autho
 - Completed on branch `feat/level-editor`.
 - Build check: `npm run build` passes in `level-editor/`.
 - Security check: `npm audit` reports zero vulnerabilities in `level-editor/`.
-- Review polish applied: title is `Mushy Game Level Editor`, non-production mode is visible in dev/preview only, production hides user ID/session diagnostics, section tabs are visually connected to their panel, and styling follows the Mushy miniapp template direction.
+- Review polish applied: title is `Mushy Game Level Editor`, non-production mode is visible in dev/preview only, production hides user ID/session diagnostics, the authenticated header is compact with one account management block, section tabs are visually connected to their panel, and styling follows the Mushy miniapp template direction.
 
 ## Milestone 2 — Editor-Owned Database Schema
 - [ ] `LE-010` Add the `games` table and seed the `word-guess` game.

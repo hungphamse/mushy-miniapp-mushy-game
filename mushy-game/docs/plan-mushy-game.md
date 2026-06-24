@@ -252,6 +252,7 @@ The companion editor uses the title **Mushy Game Level Editor**. Keep it compact
 Visual direction:
 - Follow the Mushy miniapp template in `mushy-game/src/lib/theme.css` for brand feel: red/pink accents, compact rounded cards, clear status pills, and mobile-friendly spacing.
 - Do not import source files from `mushy-game/`; duplicate or recreate needed editor-local styling so the sibling apps stay deployable independently.
+- Keep authenticated editor chrome compact. The top area should be one header with a single `Account management` block on the right, not separate hero/account cards that push the interactive editor below the fold.
 - Navigation sections such as Levels, Assets, and Service Tokens must be visually connected to their active content panel. Prefer left-side connected tabs on desktop and top-connected tabs on mobile.
 
 Environment mode:

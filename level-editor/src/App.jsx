@@ -93,22 +93,26 @@ export default function App() {
           </p>
         </div>
         <div className="hero-badges">
-          {runtimeMode.isNonProduction && (
-            <span className="mode-pill development">{runtimeMode.label}</span>
+          {isOwner ? (
+            <AccountManagement
+              runtimeMode={runtimeMode}
+              session={session}
+              signingOut={submitting}
+              user={user}
+              onSignOut={handleSignOut}
+            />
+          ) : (
+            <>
+              {runtimeMode.isNonProduction && (
+                <span className="mode-pill development">{runtimeMode.label}</span>
+              )}
+              <span className="session-pill">{user ? user.email : 'Signed out'}</span>
+            </>
           )}
-          <span className="session-pill">{user ? user.email : 'Signed out'}</span>
         </div>
       </section>
 
-      {isOwner && (
-        <EditorShell
-          runtimeMode={runtimeMode}
-          session={session}
-          signingOut={submitting}
-          user={user}
-          onSignOut={handleSignOut}
-        />
-      )}
+      {isOwner && <EditorShell />}
 
       {isOwner && sessionError && <div className="alert">{sessionError}</div>}
       {isOwner && authError && <div className="alert">{authError}</div>}
@@ -222,5 +226,28 @@ export default function App() {
       </section>
       )}
     </main>
+  );
+}
+
+function AccountManagement({ runtimeMode, session, signingOut, user, onSignOut }) {
+  return (
+    <aside className="account-management" aria-label="Account management">
+      <div>
+        <p className="account-label">Account management</p>
+        <strong>{user.email}</strong>
+      </div>
+      {runtimeMode.isNonProduction && (
+        <div className="account-diagnostics">
+          <span className="mode-pill development">{runtimeMode.label}</span>
+          <span>{user.id}</span>
+          {session?.expires_at && (
+            <span>Session expires {new Date(session.expires_at * 1000).toLocaleString()}</span>
+          )}
+        </div>
+      )}
+      <button className="button secondary" disabled={signingOut} onClick={onSignOut}>
+        {signingOut ? 'Signing out...' : 'Sign out'}
+      </button>
+    </aside>
   );
 }
