@@ -58,9 +58,9 @@ export default function App() {
             <h1 className="hero-title">Mushy Game Level Editor</h1>
             <p>Add the missing environment variables before starting the editor.</p>
           </div>
-          <span className={`mode-pill ${runtimeMode.isProduction ? 'production' : 'development'}`}>
-            {runtimeMode.label}
-          </span>
+          {runtimeMode.isNonProduction && (
+            <span className="mode-pill development">{runtimeMode.label}</span>
+          )}
         </section>
         <section className="card" style={{ marginTop: 22 }}>
           <h2>Missing env vars</h2>
@@ -93,9 +93,9 @@ export default function App() {
           </p>
         </div>
         <div className="hero-badges">
-          <span className={`mode-pill ${runtimeMode.isProduction ? 'production' : 'development'}`}>
-            {runtimeMode.label}
-          </span>
+          {runtimeMode.isNonProduction && (
+            <span className="mode-pill development">{runtimeMode.label}</span>
+          )}
           <span className="session-pill">{user ? user.email : 'Signed out'}</span>
         </div>
       </section>
@@ -167,7 +167,9 @@ export default function App() {
                 Service Tokens panels behind this gate.
               </p>
               <div className="success">
-                Signed in as an owner. User ID: {user.id}
+                {runtimeMode.isNonProduction
+                  ? `Signed in as an owner. User ID: ${user.id}`
+                  : 'Signed in as an owner.'}
               </div>
               <div className="button-row">
                 <button className="button secondary" disabled={submitting} onClick={handleSignOut}>
@@ -211,7 +213,7 @@ export default function App() {
               <span>Owner-created runtime tokens will replace password-based service access.</span>
             </li>
           </ul>
-          {session && (
+          {runtimeMode.isNonProduction && session && (
             <p className="meta">
               Session expires at {new Date(session.expires_at * 1000).toLocaleString()}
             </p>

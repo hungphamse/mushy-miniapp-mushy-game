@@ -59,11 +59,13 @@ export function EditorShell({ runtimeMode, session, signingOut, user, onSignOut 
         </div>
         <div className="shell-account">
           <strong>{user.email}</strong>
-          <span>{user.id}</span>
-          {session?.expires_at && (
+          {runtimeMode.isNonProduction && (
+            <span>{user.id}</span>
+          )}
+          {runtimeMode.isNonProduction && session?.expires_at && (
             <small>Session expires {new Date(session.expires_at * 1000).toLocaleString()}</small>
           )}
-          {!runtimeMode.isProduction && (
+          {runtimeMode.isNonProduction && (
             <em>{runtimeMode.label}: verify Supabase/R2 targets before saving future content.</em>
           )}
           <button className="button secondary" disabled={signingOut} onClick={onSignOut}>

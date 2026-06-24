@@ -257,7 +257,7 @@ Visual direction:
 Environment mode:
 - Every non-production editor build must visibly identify itself as `Development editor` or `Preview editor` in the UI.
 - Local Vite development falls back to `development`; Vercel deployments use `VERCEL_ENV`.
-- Production may show a calmer `Production` badge, but development/preview must be more prominent so editors know which Supabase/R2 targets they are touching before future write APIs exist.
+- Production must not show a mode badge, account user ID, or session-expiry diagnostics. Development/preview show these diagnostics so editors know which Supabase/R2 targets they are touching before future write APIs exist.
 
 Tracking:
 - `.agents/PLAN.md` is the living task bulletin and checkpoint file for agentic implementation.

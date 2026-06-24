@@ -42,6 +42,7 @@ export function getRuntimeMode() {
         ? 'Preview editor'
         : 'Development editor',
     isProduction: normalized === 'production',
+    isNonProduction: normalized !== 'production',
   };
 }
 
