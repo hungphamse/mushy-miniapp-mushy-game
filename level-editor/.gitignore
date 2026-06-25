@@ -11,3 +11,7 @@ dist
 # Logs
 *.log
 npm-debug.log*
+
+# Raw SCOWL/profanity source files. Commit generated src/lib/data/wordLists.js instead.
+scripts/wordlist-sources/
+scripts/wordlist-downloads/

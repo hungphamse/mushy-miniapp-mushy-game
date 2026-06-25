@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "schema:verify": "node scripts/verify-schema.js"
+    "schema:verify": "node scripts/verify-schema.js",
+    "wordlists:build": "node scripts/build-word-lists.js",
+    "wordlists:verify": "node scripts/verify-word-lists.js",
+    "test": "node --test test",
+    "generator:verify": "npm run wordlists:verify && npm test"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.108.2",

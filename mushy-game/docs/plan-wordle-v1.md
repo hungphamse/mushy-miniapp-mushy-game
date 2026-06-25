@@ -308,13 +308,14 @@ Cron/backfill behavior:
 Seed format:
 - Use a stable seed such as `word-guess:${puzzleDate}` for generated content.
 - Because `word-guess.launch_date` is seeded with `now()::date` during migration, the manual launch backfill date is the migration application date for that editor-owned Supabase project.
+- The RNG algorithm/version is part of the Word-Guess `generator_version` contract. V1 uses the platform `RNG_ALGORITHM_VERSION = 'mulberry32-hash31-v1'`; changing the RNG sequence, seed format, draw order, or word-list source requires bumping `word-guess.generator_version` before writing new generated rows.
 
 ### 6.2 Generator Function
 
 The generator accepts an optional `options` object to fix a specific word length. When called by the cron without options, it picks a word length randomly (but deterministically from the seed) within the supported range of **4 to 8**.
 
 ```js
-import { seededRandom } from '../utils/random.js'; // mulberry32 — see plan-mushy-game.md §5.3
+import { seededRandom } from '../utils/random.js'; // mulberry32-hash31-v1 — see plan-mushy-game.md §5.3
 import { ANSWER_LISTS } from '../data/wordLists.js';
 
 // Constants are duplicated into level-editor for WordGuessLevelEditor.

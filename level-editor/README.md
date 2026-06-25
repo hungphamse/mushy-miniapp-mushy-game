@@ -38,6 +38,19 @@ npm run dev
 - The migration is intended to be re-runnable: table/index creation is guarded, triggers are recreated, and the `word-guess` seed keeps its original launch date on conflict.
 - After applying the migration, manually call the level-generation cron/backfill endpoint for the launch date so level `001` exists even if the scheduled cron already passed.
 
+## Generator Workflow
+
+- Word-Guess generator code is editor-local under `src/lib/generators/`; do not import from `mushy-game/`.
+- `npm run generator:verify` audits the committed word lists and runs fixed-date generator tests.
+- `src/lib/utils/random.js` exports `RNG_ALGORITHM_VERSION = 'mulberry32-hash31-v1'`; changing the RNG sequence requires a `generator_version` bump for affected games.
+- `src/lib/data/wordLists.js` is committed generated data from SCOWL 2020.12.07 (`english-words.35` answers and `english-words.50` valid guesses), filtered by LDNOOBW for answers.
+- To regenerate word lists, place raw sources in `scripts/wordlist-sources/` and run `npm run wordlists:build`, then `npm run generator:verify`.
+- Preferred source names for configurable builds:
+  - `scowl-answers.txt` or `scowl-answers-*.txt` for answer lists. For easier answers, copy `english-words.20` to `scowl-answers.txt`.
+  - `scowl-valid-guesses.txt` or `scowl-valid-guesses-*.txt` for valid guesses. To merge forgiving guesses, copy multiple files such as `english-words.50`, `american-words.50`, and `british-words.50` to `scowl-valid-guesses-english.txt`, `scowl-valid-guesses-american.txt`, and `scowl-valid-guesses-british.txt`.
+  - If these preferred names are absent, the builder falls back to legacy `scowl-35.txt` and `scowl-50.txt`.
+- Raw SCOWL/profanity source files stay gitignored; commit only the generated `src/lib/data/wordLists.js`.
+
 ## Security Notes
 
 - The Vite owner allowlist is client-visible and only protects the UI.

@@ -519,15 +519,16 @@ INSERT INTO daily_levels (...) VALUES (...) -- level-editor level catalog DB
 ON CONFLICT (game_id, puzzle_date) DO NOTHING
 ```
 
-> When saving a custom level, the companion `level-editor` backend uses the catalog schema's immutable `compute_level_number()` helper to derive `level_number` and copies `game_version`, `content_schema_version`, `generator_version`, and `rules_version` from the `games` row into the `daily_levels` row — no counter increment, no DB lock needed.
+> When saving a custom level, the companion `level-editor` backend copies `game_version`, `content_schema_version`, `generator_version`, and `rules_version` from the `games` row into the `daily_levels` row. The database trigger assigns stored `level_number` from `games.launch_date`, so app code does not duplicate level-number arithmetic.
 
 ### 5.2 Level Catalog Vercel Cron (`level-editor/api/cron/generate-levels.js`)
 
 - Schedule: `0 0 * * *` (midnight UTC) in `level-editor/vercel.json`
 - Protected by `CRON_SECRET` header (Vercel built-in)
 - Uses level-editor server-side Supabase credentials — no user JWT in a cron context
-- Flow per active game: generate content → derive `level_number` through the editor-owned catalog schema helper → insert level with version snapshots from the `games` row → `ON CONFLICT DO NOTHING`
-- Logs: `{ game, levelNumber, date, wasSkipped }` per game
+- Flow per active game: resolve date → generate content from the level-editor generator registry → insert level with version snapshots from the `games` row → database triggers assign `level_number` and `content_hash` → `ON CONFLICT DO NOTHING`
+- The same handler supports manual launch/backfill calls with `date=YYYY-MM-DD`, so maintainers can materialize migration-date level `001` immediately after applying the catalog migration.
+- Logs: `{ gameSlug, puzzleDate, action, levelNumber, generatorVersion }` per game. Production logs must not include generated answers.
 
 ```js
 // level-editor/vercel.json
@@ -556,11 +557,19 @@ Mushy Game and `level-editor/` each keep their own copy of the generator registr
 
 All generators use a **mulberry32** seeded PRNG. This algorithm was chosen for its simplicity, speed, and good statistical properties for small-scale use. The seed string is hashed to a 32-bit integer before being fed to mulberry32.
 
+RNG versioning:
+- The RNG sequence is part of the deterministic generator contract and is versioned through each game's `generator_version`.
+- The utility exports an explicit `RNG_ALGORITHM_VERSION` string so tests and docs can name the exact sequence contract. V1 uses `mulberry32-hash31-v1`.
+- If the hash function, PRNG algorithm, seed format, draw order, or source word list changes in a way that can make the same seed produce different content, bump `generator_version` for affected games before writing new generated rows.
+- Do not add a separate `rng_version` database column in V1. `daily_levels.generator_version` is the durable snapshot that tells the runtime/editor which deterministic generation contract produced the row.
+
 ```js
 // src/lib/utils/random.js
 
+export const RNG_ALGORITHM_VERSION = 'mulberry32-hash31-v1';
+
 /**
- * Simple 32-bit string hash (djb2 variant).
+ * Simple 32-bit string hash.
  * Converts a seed string into a stable 32-bit unsigned integer.
  */
 function hashSeed(str) {
@@ -601,7 +610,7 @@ export function generate(seed) {
 }
 ```
 
-The same `seededRandom` implementation must be used everywhere the seed is consumed — cron, the companion level-editor preview path, and the dev helper script. Since all three call the generator function directly (never the RNG directly), consistency is guaranteed automatically.
+The same `seededRandom` implementation and `RNG_ALGORITHM_VERSION` must be used everywhere the seed is consumed — cron, the companion level-editor preview path, and the dev helper script. Since all three call the generator function directly (never the RNG directly), consistency is guaranteed automatically. If a future rewrite intentionally changes the sequence, keep old published rows unchanged, bump `generator_version`, and add snapshot tests showing the old and new contracts separately.
 
 ---
 
@@ -1362,8 +1371,9 @@ mount (receives route.bundle = { session, level, game })
 midnight UTC
   │
   └─ for each active game:
-       ├─ derive level_number through the editor-owned catalog schema helper
+       ├─ generate content from the level-editor generator registry
        ├─ INSERT daily_level with game_version/content_schema_version/generator_version/rules_version snapshots
+       │     database triggers assign level_number and content_hash
        │     ON CONFLICT (game_id, puzzle_date) DO NOTHING
        │     ├─ conflict (level-editor pre-inserted override) → log { skipped: true }
        │     └─ inserted → log { skipped: false, levelNumber }
@@ -1410,8 +1420,8 @@ Build `level-editor` first. It owns the level catalog, cron publishing, editor a
 ### Phase 2 — Level Catalog Schema
 1. Write `level-editor/migrations/001_level_catalog_schema.sql`.
 2. Create `games`, `daily_levels`, `editor_assets`, `level_asset_refs`, and `editor_service_tokens`.
-3. Add immutable catalog helper `compute_level_number(launched_at, puzzle_date)` and ensure all catalog writes use persisted `level_number`.
-4. Seed the first `games` row for `word-guess` with version snapshots and `launched_at`.
+3. Add immutable catalog helper `compute_level_number(puzzle_date, launch_date)` and ensure all catalog writes rely on the database trigger for persisted `level_number`.
+4. Seed the first `games` row for `word-guess` with version snapshots and `launch_date`.
 5. Verification: migrations apply cleanly in the editor-owned Supabase project; `compute_level_number()` returns #1 on launch date and rejects dates before launch; `mushy-game/migrations/001_mushy_game_schema.sql` does not define any catalog/token/asset tables.
 
 ### Phase 3 — Word-Guess Generator Data In Level-Editor
@@ -1421,21 +1431,37 @@ Build `level-editor` first. It owns the level catalog, cron publishing, editor a
 4. Add a dev preview helper or route that can generate `word-guess` content for any date without writing.
 5. Verification: the same date seed always returns the same content; generated content passes the Wordle content invariants from `plan-wordle-v1.md`; changing generator output requires a `generator_version` bump.
 
-### Phase 4 — Level-Editor Level APIs And UI
-1. Implement calendar/upcoming-level UI in `level-editor/src/App.jsx`.
-2. Implement `/api/levels?gameId=&from=&to=`, `/api/levels/preview?gameId=&puzzleDate=`, `POST /api/levels`, `DELETE /api/levels?gameId=&puzzleDate=`, and `/api/levels/check-duplicate?gameId=&answer=`.
-3. Implement JSON fallback editing for any game type.
-4. Implement `WordGuessLevelEditor.jsx` with word length, max attempts, answer autocomplete, live preview, validation, and duplicate detection.
-5. Verification: editor can preview a generated future date, save a custom override, reload it, clear it, and see duplicate Wordle notices; invalid content blocks save.
+### Phase 4 — Level-Editor Level APIs
+1. Implement `/api/levels?gameId=&from=&to=`, `/api/levels/preview?gameId=&puzzleDate=`, `POST /api/levels`, `DELETE /api/levels?gameId=&puzzleDate=`, and `/api/levels/check-duplicate?gameId=&answer=`.
+2. Keep preview read-only: it calls the local generator copy and returns generated content for a date without writing a `daily_levels` row.
+3. Keep save/clear writes authenticated through editor-owned Supabase sessions and rely on database triggers for `level_number` and `content_hash`.
+4. Verification: APIs can preview a generated future date, save a custom override, reload it, clear it, and report duplicate Word-Guess answers; invalid content is rejected before persistence.
 
-### Phase 5 — Level-Editor Asset Workflow
+### Phase 5 — Level Catalog Cron
+1. Implement `level-editor/api/cron/generate-levels.js` with `CRON_SECRET` validation for Vercel Cron and manual maintainer calls.
+2. Resolve a default UTC puzzle date and support explicit `date=YYYY-MM-DD` backfill calls. Reject invalid dates clearly.
+3. Load active `games` from the editor-owned Supabase project using server-side credentials.
+4. For each active game, call the local `level-editor` generator registry with the stable seed, copy version snapshots from the `games` row, and insert a missing generated/published `daily_levels` row.
+5. Let database triggers assign `level_number` and `content_hash`; cron must not compute either value in app code.
+6. Preserve existing rows: generated/published rows are skipped unchanged, custom rows are never overwritten, and retries are safe.
+7. Add `level-editor/vercel.json` cron config for midnight UTC using the same endpoint as manual backfill.
+8. Add dry-run or non-production verification so maintainers can see intended per-game actions without inserting rows.
+9. Verification: tests cover auth failures, UTC date resolution, manual date override, idempotency, custom override preservation, version snapshots, database-assigned `level_number`, database-maintained `content_hash`, and production-safe logging.
+
+### Phase 6 — Level-Editor Authoring UI
+1. Implement calendar/upcoming-level UI in `level-editor/src/App.jsx`.
+2. Implement JSON fallback editing for any game type.
+3. Implement `WordGuessLevelEditor.jsx` with word length, max attempts, answer autocomplete, live preview, validation, and duplicate detection.
+4. Verification: editor can preview generated content, save a custom override, reload it, clear it, and see duplicate Wordle notices; invalid content blocks save.
+
+### Phase 7 — Level-Editor Asset Workflow
 1. Implement `editor_assets` and `level_asset_refs` access through `level-editor/src/lib/editorAssets.js`.
 2. Implement `/api/assets`, `/api/assets/presign`, `/api/assets/:id/complete`, `/api/assets/:id`, and `/api/assets/view-url`.
 3. Store `imageObjectKey` in level content; never persist `publicUrl` or `imageAssetId` in level content.
 4. Resolve short-lived view URLs from `objectKey` only when preview/runtime display needs them.
 5. Verification: editor can upload, complete, preview, reuse, clear, archive, and hard-delete only unreferenced assets; saved levels keep object keys stable and old published levels remain renderable.
 
-### Phase 6 — Service Tokens And Runtime Catalog API
+### Phase 8 — Service Tokens And Runtime Catalog API
 1. Implement owner-only `ServiceTokensPanel`.
 2. Implement `GET /api/service-tokens`, `POST /api/service-tokens`, and `POST /api/service-tokens/:id/revoke`.
 3. Store only hashed/HMACed tokens in `editor_service_tokens`; show raw token exactly once.
@@ -1443,25 +1469,19 @@ Build `level-editor` first. It owns the level catalog, cron publishing, editor a
 5. Allow `asset:read` service tokens to call `/api/assets/view-url` only for object keys referenced by published levels.
 6. Verification: owner can create/revoke a token; raw token cannot be recovered after creation; revoked/expired/wrong-scope tokens fail; valid token can read active game metadata, today's published level bundle, and published asset view URLs.
 
-### Phase 7 — Level Catalog Cron
-1. Implement `level-editor/api/cron/generate-levels.js`.
-2. Add `level-editor/vercel.json` cron config.
-3. Cron iterates active games, calls the local generator copy, derives persisted `level_number` through the catalog helper, snapshots version fields, and uses `ON CONFLICT (game_id, puzzle_date) DO NOTHING`.
-4. Verification: cron can be run manually with `CRON_SECRET`; it inserts missing levels, skips custom overrides, returns per-game results, and never rewrites old/custom level content.
-
-### Phase 8 — Level-Editor End-To-End Acceptance
+### Phase 9 — Level-Editor End-To-End Acceptance
 1. Run through the full owner/editor workflow: login, create service token, generate preview, save custom Wordle level, upload/reuse image asset if applicable, run cron, read catalog with service token.
 2. Record the required Mushy Game env values: `LEVEL_EDITOR_API_BASE_URL` and `LEVEL_EDITOR_SERVICE_TOKEN`.
 3. Freeze the HTTP response shapes for `GET /api/catalog/games` and `GET /api/catalog/daily-level`.
 4. Verification: a standalone script or HTTP client can fetch the same catalog bundle Mushy Game will need, without any Mushy Game database or frontend code.
 
-### Phase 9 — Mushy Game Runtime Schema And Catalog Client
+### Phase 10 — Mushy Game Runtime Schema And Catalog Client
 1. Write `mushy-game/migrations/001_mushy_game_schema.sql` for `player_sessions` only.
 2. Add Mushy Game server helper for calling level-editor with `LEVEL_EDITOR_API_BASE_URL` and `LEVEL_EDITOR_SERVICE_TOKEN`.
 3. Implement `src/lib/app/levels.js` and `GET /api/games/home` using level-editor catalog APIs.
 4. Verification: HomeScreen data can be fetched from a real level-editor deployment; Mushy Game never queries the editor-owned Supabase database directly.
 
-### Phase 10 — Mushy Game Gameplay Runtime
+### Phase 11 — Mushy Game Gameplay Runtime
 1. Implement `Timer.jsx`.
 2. Implement `api/sessions/enter.js`, `api/sessions/ping.js`, and `api/sessions/complete.js`.
 3. Implement `src/lib/app/session.js`.
@@ -1469,7 +1489,7 @@ Build `level-editor` first. It owns the level catalog, cron publishing, editor a
 5. Implement the first runtime `WordGuessRenderer.jsx`.
 6. Verification: player can start, resume, reconnect, complete, and reopen today's Wordle level using content fetched from level-editor.
 
-### Phase 11 — Result, Stats, And Polish
+### Phase 12 — Result, Stats, And Polish
 1. Implement `api/stats/workspace.js`, `api/stats/global.js`, and `src/lib/app/stats.js`.
 2. Implement `ResultScreen.jsx` with score card, percentile cards, streak/freeze card, and game-specific answer reveal where applicable.
 3. Run end-to-end disconnect recovery, carryover, freeze-bank, stale-session, first-level, no-completion, and workspace-size edge cases.
@@ -1896,7 +1916,7 @@ Once Steps 1–4 above are done (Step 5 is optional), the following work automat
 | 6 | Ping connection window threshold exact value? | `MISSED_PING_THRESHOLD_MS = 5000` — equal to `PING_INTERVAL_MS`. No grace buffer. See §4.2 for both constants. |
 | 7 | Auto-reconnect behaviour on missed ping? | Client auto-retries up to 3 times (2 s apart) before showing a manual "Kết nối lại" button. See §4.3. |
 | 8 | Streak freeze — token system or automatic? | **Automatic banked freeze** — no token system. Wins add one freeze up to a cap of 2. Loss-capable games consume one freeze on loss if available; otherwise the streak resets to 0. Timer-only games do not use the freeze bank. See §7. |
-| 9 | Seeded RNG algorithm? | **mulberry32**, seeded via djb2 string hash. Implementation in `src/lib/utils/random.js`. See §5.3. |
+| 9 | Seeded RNG algorithm? | **mulberry32**, seeded via the V1 `hash31` string hash. Implementation exports `RNG_ALGORITHM_VERSION = 'mulberry32-hash31-v1'` from `src/lib/utils/random.js`. RNG sequence changes are versioned by bumping the affected game's `generator_version`. See §5.3. |
 | 10 | Word list build pipeline — when to run, committed or not? | `wordLists.js` is **generated once, committed**. Run `npm run build:wordlists` manually before first deploy and when source lists update. Source `.txt` files are gitignored. Ship all 5 lengths (4–8) at launch. See plan-wordle-v1.md §5.1. |
 | 11 | Who owns the timer and the "Cách chơi" dialog — GameScreen or the renderer? | **GameScreen owns both.** Timer state (`elapsed`, `running`) lives in GameScreen; `<Timer />` is rendered in the header. The dialog shell (with **×** close button) is rendered by GameScreen around the `HowToPlay` named export from the renderer file. The renderer receives no timer or dialog props. See §4.1. |
 | 12 | Should `onAction` be called on the final move before `onComplete`? | **No.** On the move that ends the puzzle, call `onComplete` only. `onAction` is for intermediate checkpoints; `onComplete` is the terminal signal. Calling both would fire a redundant game-action ping immediately before the completion request. See §17.4. |

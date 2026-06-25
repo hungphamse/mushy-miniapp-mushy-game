@@ -67,20 +67,27 @@ Build the standalone `level-editor/` first as the owner/editor surface for autho
 - Verification: `npm run schema:verify`, `npm run build`, and `npm audit` pass in `level-editor/`.
 
 ## Milestone 3 — Word-Guess Generator Support
-- [ ] `LE-020` Duplicate Wordle constants into `level-editor/`.
+- [x] `LE-020` Duplicate Wordle constants into `level-editor/`.
   Done when: editor generator logic does not import constants from `mushy-game/`.
 
-- [ ] `LE-021` Add deterministic seeded RNG utilities.
-  Done when: the same date and game key always produce the same generated level data.
+- [x] `LE-021` Add deterministic seeded RNG utilities.
+  Done when: the same date and game key always produce the same generated level data, the RNG exports an explicit algorithm/version label such as `RNG_ALGORITHM_VERSION = 'mulberry32-hash31-v1'`, and the plan notes that changing the RNG sequence requires a `generator_version` bump for affected games.
 
-- [ ] `LE-022` Add word-list build or import workflow.
+- [x] `LE-022` Add word-list build or import workflow.
   Done when: curated answer/guess lists are available inside `level-editor/` and can be regenerated or audited.
 
-- [ ] `LE-023` Implement the Word-Guess generator.
-  Done when: a generated level includes the answer, accepted guesses, display metadata, and persisted level number.
+- [x] `LE-023` Implement the Word-Guess generator.
+  Done when: a generated level returns valid Word-Guess content and generator metadata only; it does not compute or persist `level_number`, because the editor-owned database trigger assigns that value on insert.
 
-- [ ] `LE-024` Add generator tests for fixed dates.
+- [x] `LE-024` Add generator tests for fixed dates.
   Done when: known dates produce stable snapshots and duplicate answers are detectable.
+
+### Milestone 3 Checkpoint
+- Added editor-local Word-Guess constants, generator metadata, registry, date seed helper, and pure `generate()`/`generateForDate()` functions.
+- Added deterministic `seededRandom()` with `RNG_ALGORITHM_VERSION = 'mulberry32-hash31-v1'`; RNG sequence changes require a `generator_version` bump.
+- Added committed generated `wordLists.js`, `wordlists:build`, and `wordlists:verify`. The committed list is generated from SCOWL 2020.12.07 (`english-words.35` answers and `english-words.50` valid guesses), with LDNOOBW applied to answers.
+- Added duplicate-answer utility for later API/UI use without coupling it to Supabase or HTTP.
+- Verification: `npm run generator:verify`, `npm run schema:verify`, and `npm run build` pass in `level-editor/`.
 
 ## Milestone 4 — Level Authoring APIs
 - [ ] `LE-030` Add authenticated level preview API.
@@ -101,87 +108,99 @@ Build the standalone `level-editor/` first as the owner/editor surface for autho
 - [ ] `LE-035` Add API tests for save, clear, preview, and duplicate checks.
   Done when: tests cover owner/editor access, invalid payloads, and stable date behavior.
 
-## Milestone 5 — Level Authoring UI
-- [ ] `LE-040` Build the level calendar/list screen.
+## Milestone 5 — Cron And Daily Catalog Maintenance
+- [ ] `LE-040` Add cron date resolution and auth guard.
+  Done when: `level-editor/api/cron/generate-levels.js` accepts Vercel Cron calls plus manual maintainer calls, validates `CRON_SECRET`, resolves a default UTC date, accepts an optional `date=YYYY-MM-DD`, rejects invalid/future-before-launch dates clearly, and never uses editor browser sessions.
+
+- [ ] `LE-041` Add active-game loading for cron.
+  Done when: the cron endpoint loads active `games` rows from the editor-owned Supabase project with server-side credentials and returns a safe per-game result shape without exposing secrets.
+
+- [ ] `LE-042` Add generated level materialization.
+  Done when: for each active game, cron calls the local `level-editor` generator registry, builds the stable seed, inserts a missing `daily_levels` row with generated/published source/status and version snapshots, and relies on database triggers for `level_number` and `content_hash`.
+
+- [ ] `LE-043` Preserve existing and custom rows.
+  Done when: cron is idempotent: existing generated/published rows are reported as skipped/unchanged, custom rows are never overwritten, retries are safe, and the response distinguishes inserted, skipped existing, skipped custom, and failed games.
+
+- [ ] `LE-044` Add launch-date backfill workflow.
+  Done when: maintainers have a documented/manual command or script to call `POST /api/cron/generate-levels?date=YYYY-MM-DD` immediately after migration so launch-date level `001` is materialized even if the scheduled cron already passed.
+
+- [ ] `LE-045` Add Vercel Cron configuration.
+  Done when: `level-editor/vercel.json` schedules the endpoint at midnight UTC and uses the same route as the manual backfill path.
+
+- [ ] `LE-046` Add cron tests.
+  Done when: tests cover auth failures, default UTC date resolution, manual date override, idempotency, custom override preservation, version snapshots, database-assigned `level_number`, and database-maintained `content_hash`.
+
+- [ ] `LE-047` Add cron observability and dry-run support.
+  Done when: non-production maintainers can run a safe dry-run/check path that reports intended per-game actions without inserting rows, and real cron logs include `{ gameSlug, puzzleDate, action, levelNumber, generatorVersion }` without logging generated answers in production.
+
+## Milestone 6 — Level Authoring UI
+- [ ] `LE-050` Build the level calendar/list screen.
   Done when: an authenticated editor can choose a game/date and see generated/custom status.
 
-- [ ] `LE-041` Build shared level fields.
+- [ ] `LE-051` Build shared level fields.
   Done when: date, game, publish/source status, and validation messages are visible consistently.
 
-- [ ] `LE-042` Build the Word-Guess editor form.
+- [ ] `LE-052` Build the Word-Guess editor form.
   Done when: an editor can set the answer and accepted guesses without editing raw JSON.
 
-- [ ] `LE-043` Add answer autocomplete.
+- [ ] `LE-053` Add answer autocomplete.
   Done when: answer suggestions come from the editor-owned word list.
 
-- [ ] `LE-044` Add live preview.
+- [ ] `LE-054` Add live preview.
   Done when: changing form values updates a preview using the same shape the runtime API will expose.
 
-- [ ] `LE-045` Add duplicate warning UX.
+- [ ] `LE-055` Add duplicate warning UX.
   Done when: duplicate checks are debounced and clearly shown before save.
 
-- [ ] `LE-046` Add save and clear flows.
+- [ ] `LE-056` Add save and clear flows.
   Done when: editor actions round-trip through APIs and refresh the calendar/list state.
 
-## Milestone 6 — Asset Workflow
-- [ ] `LE-050` Add object storage configuration and server helper.
+## Milestone 7 — Asset Workflow
+- [ ] `LE-060` Add object storage configuration and server helper.
   Done when: asset operations use `object_key` internally and never persist long-lived public URLs.
 
-- [ ] `LE-051` Add asset upload initiation API.
+- [ ] `LE-061` Add asset upload initiation API.
   Done when: the editor can request an upload target/key for a new asset.
 
-- [ ] `LE-052` Add upload completion API.
+- [ ] `LE-062` Add upload completion API.
   Done when: completed uploads create or update asset metadata in the editor database.
 
-- [ ] `LE-053` Add short-lived asset view URL API.
+- [ ] `LE-063` Add short-lived asset view URL API.
   Done when: callers can exchange an `object_key` for a temporary URL with about a one-hour lifetime.
 
-- [ ] `LE-054` Add asset picker UI.
+- [ ] `LE-064` Add asset picker UI.
   Done when: editors can select assets by metadata and the level stores `imageObjectKey`, not URL or `imageAssetId`.
 
-- [ ] `LE-055` Add asset reference syncing on level save.
+- [ ] `LE-065` Add asset reference syncing on level save.
   Done when: saving level content updates `level_asset_refs` from object keys in the content JSON.
 
-- [ ] `LE-056` Add asset workflow tests.
+- [ ] `LE-066` Add asset workflow tests.
   Done when: tests confirm object keys persist, public URLs do not persist, and expired URLs can be regenerated.
 
-## Milestone 7 — Service Tokens And Runtime Catalog APIs
-- [ ] `LE-060` Add service-token generation helper.
+## Milestone 8 — Service Tokens And Runtime Catalog APIs
+- [ ] `LE-070` Add service-token generation helper.
   Done when: raw tokens are generated securely, stored only as hashes, and shown once.
 
-- [ ] `LE-061` Add owner-only create/list/revoke service-token APIs.
+- [ ] `LE-071` Add owner-only create/list/revoke service-token APIs.
   Done when: owners can create scoped tokens, list metadata, and revoke tokens.
 
-- [ ] `LE-062` Build the Service Tokens owner UI.
+- [ ] `LE-072` Build the Service Tokens owner UI.
   Done when: the owner can create a token with `catalog:read` and/or `asset:read`, copy it once, and revoke it.
 
-- [ ] `LE-063` Add service-token auth middleware.
+- [ ] `LE-073` Add service-token auth middleware.
   Done when: runtime APIs accept bearer tokens, enforce scopes, reject revoked tokens, and never require editor email/password.
 
-- [ ] `LE-064` Add runtime games/catalog API.
+- [ ] `LE-074` Add runtime games/catalog API.
   Done when: Mushy Game can fetch available games using only `LEVEL_EDITOR_SERVICE_TOKEN`.
 
-- [ ] `LE-065` Add runtime daily-level API.
+- [ ] `LE-075` Add runtime daily-level API.
   Done when: Mushy Game can fetch level content by game/date and receives stored `level_number`.
 
-- [ ] `LE-066` Add runtime asset URL API.
+- [ ] `LE-076` Add runtime asset URL API.
   Done when: Mushy Game can request short-lived asset URLs using `asset:read` scope.
 
-- [ ] `LE-067` Add service-token security tests.
+- [ ] `LE-077` Add service-token security tests.
   Done when: tests cover missing token, bad token, revoked token, insufficient scope, and valid scoped access.
-
-## Milestone 8 — Cron And Daily Catalog Maintenance
-- [ ] `LE-070` Add cron endpoint for daily level materialization.
-  Done when: the endpoint creates or confirms generated daily rows without overwriting custom levels.
-
-- [ ] `LE-071` Add Vercel Cron configuration.
-  Done when: cron can be deployed from the level-editor app and targets the correct endpoint.
-
-- [ ] `LE-072` Add manual cron verification.
-  Done when: an owner or maintainer can trigger/check the cron path safely in non-production.
-
-- [ ] `LE-073` Add cron tests.
-  Done when: tests confirm idempotency, immutable level numbers, and custom override preservation.
 
 ## Milestone 9 — End-To-End Acceptance
 - [ ] `LE-080` Run owner login acceptance.
