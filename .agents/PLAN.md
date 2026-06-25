@@ -90,23 +90,30 @@ Build the standalone `level-editor/` first as the owner/editor surface for autho
 - Verification: `npm run generator:verify`, `npm run schema:verify`, and `npm run build` pass in `level-editor/`.
 
 ## Milestone 4 — Level Authoring APIs
-- [ ] `LE-030` Add authenticated level preview API.
+- [x] `LE-030` Add authenticated level preview API.
   Done when: the editor can request generated/custom preview data for a game/date without saving.
 
-- [ ] `LE-031` Add level list/calendar API.
+- [x] `LE-031` Add level list/calendar API.
   Done when: the editor can load daily level status across a date range.
 
-- [ ] `LE-032` Add save custom level API.
+- [x] `LE-032` Add save custom level API.
   Done when: authenticated editors can create or replace custom level content for a date.
 
-- [ ] `LE-033` Add clear custom override API.
+- [x] `LE-033` Add clear custom override API.
   Done when: an editor can revert a date back to generated content without deleting generated behavior.
 
-- [ ] `LE-034` Add duplicate-answer check API.
+- [x] `LE-034` Add duplicate-answer check API.
   Done when: the API reports whether a proposed Word-Guess answer already appears in nearby or existing levels.
 
-- [ ] `LE-035` Add API tests for save, clear, preview, and duplicate checks.
+- [x] `LE-035` Add API tests for save, clear, preview, and duplicate checks.
   Done when: tests cover owner/editor access, invalid payloads, and stable date behavior.
+
+### Milestone 4 Checkpoint
+- Added editor-session API auth that verifies Supabase access tokens server-side from `Authorization: Bearer <token>`.
+- Added `GET /api/levels/preview`, `GET /api/levels`, `POST /api/levels`, `DELETE /api/levels`, and `GET /api/levels/check-duplicate`.
+- Preview is read-only and uses the local generator registry. Save writes custom levels only after Word-Guess content validation.
+- Level writes do not compute `level_number` or `content_hash`; the editor-owned database triggers remain responsible for those persisted values.
+- Tests cover auth failures, preview/list/save/clear/duplicate behavior, invalid payload rejection, and trigger-owned field boundaries.
 
 ## Milestone 5 — Cron And Daily Catalog Maintenance
 - [ ] `LE-040` Add cron date resolution and auth guard.
