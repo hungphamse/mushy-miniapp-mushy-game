@@ -16,16 +16,16 @@ Build the standalone `level-editor/` first as the owner/editor surface for autho
   Done when: the app installs, starts locally, renders a placeholder page, and does not depend on `mushy-game/` imports.
 
 - [x] `LE-002` Add environment configuration validation.
-  Done when: missing Supabase/editor env vars fail fast with clear messages, and local example env docs exist.
+  Done when: server-only Supabase/editor env vars are documented and local example env docs exist.
 
 - [x] `LE-003` Add Supabase client helpers for browser and server/API usage.
-  Done when: login-capable client code and server-side privileged helpers are separated.
+  Done when: browser code calls backend auth APIs and server-side Supabase helpers own privileged/authenticated access.
 
 - [x] `LE-004` Implement password login/logout/session handling.
   Done when: manually created Supabase Auth users can log in, log out, and reload without losing session.
 
 - [x] `LE-005` Implement owner-only authorization.
-  Done when: owner identity is checked from an allowlist, not user-editable metadata. Current milestone gates the UI and provides server helper boundaries; future privileged APIs must repeat the check server-side.
+  Done when: owner identity is checked server-side from an allowlist, not user-editable metadata. Browser code must not receive owner allowlists.
 
 - [x] `LE-006` Add the base editor shell.
   Done when: authenticated users see navigation placeholders for Levels, Assets, and Service Tokens.
@@ -35,6 +35,7 @@ Build the standalone `level-editor/` first as the owner/editor surface for autho
 - Build check: `npm run build` passes in `level-editor/`.
 - Security check: `npm audit` reports zero vulnerabilities in `level-editor/`.
 - Review polish applied: title is `Mushy Game Level Editor`, non-production mode is visible in dev/preview only, production hides user ID/session diagnostics, the authenticated header is compact with one account management block, section tabs are visually connected to their panel, and styling follows the Mushy miniapp template direction.
+- Auth hardening update: browser Supabase Auth usage and frontend owner allowlist checks were replaced by backend `/api/auth/*` routes, HTTP-only cookies, and server-only owner allowlists.
 
 ## Milestone 2 — Editor-Owned Database Schema
 - [x] `LE-010` Add the `games` table and seed the `word-guess` game.
@@ -109,7 +110,7 @@ Build the standalone `level-editor/` first as the owner/editor surface for autho
   Done when: tests cover owner/editor access, invalid payloads, and stable date behavior.
 
 ### Milestone 4 Checkpoint
-- Added editor-session API auth that verifies Supabase access tokens server-side from `Authorization: Bearer <token>`.
+- Added editor-session API auth that verifies Supabase access tokens server-side from HTTP-only cookies or `Authorization: Bearer <token>` and enforces server-side owner allowlists.
 - Added `GET /api/levels/preview`, `GET /api/levels`, `POST /api/levels`, `DELETE /api/levels`, and `GET /api/levels/check-duplicate`.
 - Preview is read-only and uses the local generator registry. Save writes custom levels only after Word-Guess content validation.
 - Level writes do not compute `level_number` or `content_hash`; the editor-owned database triggers remain responsible for those persisted values.

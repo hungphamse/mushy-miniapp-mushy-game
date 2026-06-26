@@ -22,6 +22,28 @@ export function createSupabaseServerClient(env = process.env) {
   });
 }
 
+export function createSupabaseAuthClient(env = process.env) {
+  if (typeof window !== 'undefined') {
+    throw new Error('createSupabaseAuthClient must not be used in browser code.');
+  }
+
+  const url = env.LEVEL_EDITOR_SUPABASE_URL;
+  const anonKey = env.LEVEL_EDITOR_SUPABASE_ANON_KEY || env.LEVEL_EDITOR_SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !anonKey) {
+    throw new Error(
+      'Missing server env vars: LEVEL_EDITOR_SUPABASE_URL and LEVEL_EDITOR_SUPABASE_ANON_KEY',
+    );
+  }
+
+  return createClient(url, anonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+}
+
 export function getOwnerAllowlist(env = process.env) {
   return {
     userIds: parseServerCsv(env.LEVEL_EDITOR_OWNER_USER_IDS),

@@ -7,17 +7,17 @@ Standalone owner/editor application for authoring Mushy daily levels.
 This scaffold covers:
 
 - `LE-001`: Vite/React app scaffold.
-- `LE-002`: Browser env validation.
-- `LE-003`: Supabase browser helper plus server/API helper boundary.
-- `LE-004`: Password login/logout/session handling.
-- `LE-005`: Owner allowlist gate for the editor UI.
+- `LE-002`: Runtime mode detection.
+- `LE-003`: Server/API Supabase helper boundary.
+- `LE-004`: Backend password login/logout/session handling with HTTP-only cookies.
+- `LE-005`: Server-side owner allowlist gate.
 - `LE-006`: Authenticated editor shell with Levels, Assets, and Service Tokens placeholders.
 
 ## Local Setup
 
 1. Copy `.env.example` to `.env.local`.
-2. Fill in the editor-owned Supabase project URL and publishable/anon key.
-3. Add your Supabase Auth user ID or email to the owner allowlist.
+2. Fill in the server-only editor-owned Supabase project URL, anon key, and service-role key.
+3. Add your Supabase Auth user ID or email to the server-side owner allowlist.
 4. Run:
 
 ```powershell
@@ -77,8 +77,9 @@ Invoke-RestMethod `
 
 ## Security Notes
 
-- The Vite owner allowlist is client-visible and only protects the UI.
-- Future HTTP APIs must enforce owner checks on the server with server-only env vars.
+- The browser does not receive Supabase keys or owner allowlists.
+- Backend auth routes set HTTP-only Supabase session cookies after password login succeeds and server-side owner authorization passes.
+- Editor management APIs require a server-validated owner session.
 - Do not use Supabase `user_metadata` for owner authorization.
 - Runtime Mushy Game access will use custom service tokens, not editor user/password sessions.
 

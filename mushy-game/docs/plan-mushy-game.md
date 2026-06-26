@@ -1167,8 +1167,8 @@ The contract is mirrored through duplicated generator logic (`generators[game.sl
 
 Auth split:
 - Runtime catalog reads (`/api/catalog/*` and published asset view-url reads) accept `Authorization: Bearer <LEVEL_EDITOR_SERVICE_TOKEN>` and require the relevant service-token scope. They return only active/published data that Mushy Game needs to start or resume gameplay.
-- Editor management routes (`/api/levels/*`, upload/presign asset routes, duplicate checks, and asset library management) require a password-authenticated level-editor Supabase user session.
-- Owner-only routes (`/api/service-tokens/*`) require a password-authenticated owner account in the level-editor app.
+- Editor management routes (`/api/levels/*`, upload/presign asset routes, duplicate checks, and asset library management) require a backend-validated level-editor Supabase user session stored in HTTP-only cookies.
+- V1 treats the level editor as owner-managed: editor management routes and owner-only routes (`/api/service-tokens/*`) require a password-authenticated owner account from the server-only owner allowlist. Browser code must not receive or evaluate the owner allowlist.
 - Cron uses Vercel `CRON_SECRET`, not a user session and not a service token.
 
 Mushy Game deployment env for catalog reads:
@@ -1207,7 +1207,7 @@ Owner account model:
 - Owner accounts are normal level-editor Supabase Auth users.
 - V1 owner bootstrap is server-side and manual, for example `LEVEL_EDITOR_OWNER_USER_IDS` or `LEVEL_EDITOR_OWNER_EMAILS` on the level-editor deployment.
 - Do not use user-editable `user_metadata` for owner checks. If the project later moves owner state into Supabase Auth claims, use server-controlled `app_metadata` or a dedicated owner table.
-- Non-owner editor users can author levels and assets, but cannot list, create, or revoke service tokens.
+- Non-owner editor users are not authorized in V1. If delegated editor roles are needed later, add a server-owned authorization model before exposing authoring routes to non-owner accounts.
 
 Settings UI:
 - Add a `ServiceTokensPanel` visible only to owner accounts.

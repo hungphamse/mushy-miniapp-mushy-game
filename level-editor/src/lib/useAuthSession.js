@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { getSupabaseClient } from './supabaseClient.js';
+import { fetchAuthSession } from './authClient.js';
 
 export function useAuthSession(enabled = true) {
+  const [refreshId, setRefreshId] = useState(0);
   const [state, setState] = useState({
     session: null,
     user: null,
@@ -16,18 +17,13 @@ export function useAuthSession(enabled = true) {
     }
 
     let active = true;
-    const supabase = getSupabaseClient();
 
-    supabase.auth.getSession()
-      .then(({ data, error }) => {
+    fetchAuthSession()
+      .then((data) => {
         if (!active) return;
-        if (error) {
-          setState({ session: null, user: null, loading: false, error: error.message });
-          return;
-        }
         setState({
-          session: data.session,
-          user: data.session?.user || null,
+          session: data.session || null,
+          user: data.user || null,
           loading: false,
           error: '',
         });
@@ -37,20 +33,13 @@ export function useAuthSession(enabled = true) {
         setState({ session: null, user: null, loading: false, error: error.message });
       });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setState({
-        session,
-        user: session?.user || null,
-        loading: false,
-        error: '',
-      });
-    });
-
     return () => {
       active = false;
-      listener.subscription.unsubscribe();
     };
-  }, [enabled]);
+  }, [enabled, refreshId]);
 
-  return state;
+  return {
+    ...state,
+    refresh: () => setRefreshId((current) => current + 1),
+  };
 }

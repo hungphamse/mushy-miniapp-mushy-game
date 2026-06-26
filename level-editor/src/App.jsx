@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { getConfigStatus, getRuntimeMode } from './lib/env.js';
-import { isOwnerUser } from './lib/owner.js';
 import { useAuthSession } from './lib/useAuthSession.js';
-import { signInWithPassword, signOut } from './lib/supabaseClient.js';
+import { signInWithPassword, signOut } from './lib/authClient.js';
 import { EditorShell } from './components/EditorShell.jsx';
 import './App.css';
 
@@ -14,13 +13,16 @@ const INITIAL_FORM = {
 export default function App() {
   const configStatus = getConfigStatus();
   const runtimeMode = getRuntimeMode();
-  const { session, user, loading, error: sessionError } = useAuthSession(configStatus.ready);
+  const {
+    session,
+    user,
+    loading,
+    error: sessionError,
+    refresh: refreshAuthSession,
+  } = useAuthSession(configStatus.ready);
   const [form, setForm] = useState(INITIAL_FORM);
   const [authError, setAuthError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  const ownerCheck = user ? isOwnerUser(user) : { allowed: false, reason: 'No user session.' };
-
   async function handleSubmit(event) {
     event.preventDefault();
     setSubmitting(true);
@@ -29,6 +31,7 @@ export default function App() {
     try {
       await signInWithPassword(form.email, form.password);
       setForm(INITIAL_FORM);
+      refreshAuthSession();
     } catch (error) {
       setAuthError(error.message || 'Unable to sign in.');
     } finally {
@@ -42,6 +45,7 @@ export default function App() {
 
     try {
       await signOut();
+      refreshAuthSession();
     } catch (error) {
       setAuthError(error.message || 'Unable to sign out.');
     } finally {
@@ -79,7 +83,7 @@ export default function App() {
 
   if (loading) return <div className="loading">Loading editor session</div>;
 
-  const isOwner = user && ownerCheck.allowed;
+  const isOwner = Boolean(user);
 
   return (
     <main className="page">
@@ -163,32 +167,13 @@ export default function App() {
                 </div>
               </form>
             </>
-          ) : ownerCheck.allowed ? (
-            <>
-              <h2>Editor ready</h2>
-              <p>
-                Owner authorization passed. The next milestone can add the Levels, Assets, and
-                Service Tokens panels behind this gate.
-              </p>
-              <div className="success">
-                {runtimeMode.isNonProduction
-                  ? `Signed in as an owner. User ID: ${user.id}`
-                  : 'Signed in as an owner.'}
-              </div>
-              <div className="button-row">
-                <button className="button secondary" disabled={submitting} onClick={handleSignOut}>
-                  Sign out
-                </button>
-              </div>
-            </>
           ) : (
             <>
               <h2>Owner access required</h2>
               <p>
-                Your Supabase session is valid, but this account is not in the level-editor owner
-                allowlist.
+                Your session was rejected by the server-side owner authorization check.
               </p>
-              <div className="alert">{ownerCheck.reason}</div>
+              <div className="alert">Sign out and use an owner account configured on the server.</div>
               <div className="button-row">
                 <button className="button secondary" disabled={submitting} onClick={handleSignOut}>
                   Sign out
