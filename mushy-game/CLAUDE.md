@@ -359,6 +359,42 @@ alter table app_{slug}.tablename replica identity full;
 
 **Response từ Reviewer** chứa field `realtime_added: ["app_{slug}.tablename", …]` để confirm marker được nhận. Nếu marker bị skip (schema sai), sẽ ở `realtime_skipped`.
 
+### 3.7 Cross-app read — cho app KHÁC đọc read-only data của mình (superapp mig 056)
+
+**Vấn đề**: 2 mini-app TRONG CÙNG 1 workspace muốn dùng chung data (vd app "report" đọc số liệu app "inventory", app "dashboard" tổng hợp từ app "expense"). Khác với cross-workspace sharing (§3.5 — cùng app, nhiều ws) — đây là **cùng ws, nhiều app**.
+
+**Sự thật cần nhớ**: RLS Mushy KHÔNG cô lập app↔app trong cùng ws — `can_access_app_data` nhánh "member trực tiếp" cho mọi member của ws đọc mọi schema `app_*`. Schema-per-app là tổ chức + scope client mặc định, KHÔNG phải tường bảo mật giữa app anh em. Vậy cross-app read = **tầng hợp đồng read-only**, không phải gỡ tường. Đủ cho hệ internal (mini-app do team viết).
+
+**3 phần** (toggle per-workspace, owner/admin bật):
+
+1. **Producer publish view** (migration của app nguồn) — chỉ cột muốn chia sẻ, gated bằng toggle:
+   ```sql
+   create or replace view app_inventory.shared_items
+   with (security_invoker = true) as
+   select id, workspace_id, name, qty, updated_at      -- CHỈ cột chia sẻ
+   from app_inventory.items
+   where public.is_cross_app_open(workspace_id);
+   grant select on app_inventory.shared_items to authenticated;
+   ```
+   `security_invoker=true` → base-table RLS (membership) vẫn áp; view chỉ thêm gate toggle. Reviewer auto-duplicate sang `_dev`, `public.*` giữ nguyên. KHÔNG cho consumer query thẳng base table — chỉ qua view (hợp đồng ổn định + cột giới hạn).
+
+2. **Owner/admin bật toggle** cho workspace: Admin Portal → Cài đặt workspace → "🔗 Đọc chéo giữa mini-app". Hoặc trong app: `setCrossAppRead({ enabled: true })`. Ws chưa bật → view trả 0 row. Tắt → mất quyền tức thì.
+
+3. **Consumer đọc** qua `src/lib/cross-app.js`:
+   ```js
+   import { appReader } from './lib/cross-app.js';
+   import { useActiveScope } from './lib/sharing.js';
+
+   const scope = useActiveScope();
+   const { data } = await appReader('inventory')      // slug app producer
+     .from('shared_items').select('*')                // VIEW producer publish
+     .eq('workspace_id', scope.workspaceId);          // LUÔN scope theo ws
+   ```
+
+**KHÔNG cần migration cho consumer** — chỉ producer viết view. RPC + helper `public.is_cross_app_open` đã có ở superapp mig 056. Quản lý toggle: `isCrossAppOpen()` / `setCrossAppRead({ enabled })` / hook `useCrossAppOpen()`.
+
+⚠️ Đây là governance read-only, KHÔNG hard-wall: 1 mini-app cố tình vẫn query được base table app khác (RLS member-branch). Cần ẩn cứng cột nhạy cảm → đừng để cột đó readable ở base table.
+
 ---
 
 ## 4. Quy tắc Security (BẮT BUỘC)
@@ -386,7 +422,7 @@ alter table app_{slug}.tablename replica identity full;
 |---|---|---|
 | `context.js` | `getContext()`, `isInShell()` | Lấy `{ token, userId, workspaceId, workspaceSlug, role, userDevMode, isAppOwner }` |
 | `supabase.js` | `db`, `dbPublic`, `getSupabase()`, `getPublicSupabase()` | `db` scoped vào `app_{slug}` (theo VITE_APP_ENV → có thể là `_dev`); `dbPublic` cho public.* (hiếm dùng) |
-| `bridge.js` | `callNative('TYPE', payload)`, `bridge.*` (typed helpers) | Native bridge. Type: `GET_LOCATION` / `OPEN_CAMERA` / `PICK_FILE` / `PUSH_NOTIFICATION` / `OPEN_TEL` / `OPEN_URL` / `SHARE` / `HAPTIC` / `SCAN_QR` / `BIOMETRIC` / `REFRESH_TOKEN` / `SAVE_IMAGE` / `COPY_TEXT` / `GET_CLIPBOARD` / `OPEN_SETTINGS` / `SAVE_CONTACT` / `PICK_CONTACT` / `ADD_CALENDAR_EVENT`. Helpers ưu tiên (`bridge.tel`, `bridge.share`, `bridge.haptic`, `bridge.scanQr`, `bridge.biometric`, `bridge.saveImage`, `bridge.copyText`, `bridge.getClipboard`, `bridge.openSettings`, `bridge.saveContact`, `bridge.pickContact`, `bridge.addCalendarEvent`) — auto-fallback browser khi DEV. Mock tự bật khi không có Shell. Generic non-http scheme (zalo://, whatsapp://, maps://...) tự được Shell route ra Linking — `<a href="...">` cũng work. |
+| `bridge.js` | `callNative('TYPE', payload)`, `bridge.*` (typed helpers) | Native bridge. Type: `GET_LOCATION` / `OPEN_CAMERA` / `PICK_FILE` / `PUSH_NOTIFICATION` / `OPEN_TEL` / `OPEN_URL` / `SHARE` / `HAPTIC` / `SCAN_QR` / `BIOMETRIC` / `REFRESH_TOKEN` / `SAVE_IMAGE` / `COPY_TEXT` / `GET_CLIPBOARD` / `OPEN_SETTINGS` / `SAVE_CONTACT` / `PICK_CONTACT` / `ADD_CALENDAR_EVENT` / `OPEN_APP`. Helpers ưu tiên (`bridge.tel`, `bridge.share`, `bridge.haptic`, `bridge.scanQr`, `bridge.biometric`, `bridge.saveImage`, `bridge.copyText`, `bridge.getClipboard`, `bridge.openSettings`, `bridge.saveContact`, `bridge.pickContact`, `bridge.addCalendarEvent`, `bridge.openApp`) — auto-fallback browser khi DEV. Mock tự bật khi không có Shell. Generic non-http scheme (zalo://, whatsapp://, maps://...) tự được Shell route ra Linking — `<a href="...">` cũng work. **Mở mini-app khác** (cùng workspace): `bridge.openApp({ appSlug, screen?, recordId? })` — KHÔNG dùng `<a href>`/`openUrl` (sẽ điều hướng trong CHÍNH WebView hiện tại, mất context). Xem dưới. |
 | `storage.js` | `upload(file, folder)`, `getViewUrl(objectKey)` | Bucket `miniapp-{slug}` **auto-tạo bởi Admin Portal khi register app** (giống DNS). Mini-app dev KHÔNG viết storage SQL. Path: `{ws_id}/[dev/]{folder}/{uuid}.{ext}` (dev có prefix `dev/` để dễ wipe). Lưu `object_key` vào DB. R2 opt-in qua `VITE_USE_R2=true`. |
 | `realtime.js` | `subscribeToTable(table, workspaceId, cb)`, `subscribeBroadcast()` | Trả unsubscribe — gọi khi unmount! |
 | `queue.js` | `enqueue(jobType, payload)`, `onJob(jobId, cb)` | Tác vụ nặng async qua `public.job_queue` |
@@ -394,6 +430,7 @@ alter table app_{slug}.tablename replica identity full;
 | `members.js` | `listMembers(workspaceId)`, `getProfiles(userIds)` | Batch lookup workspace members + full_name/avatar_url qua `dbPublic`. RLS workspace-mate đã mở (superapp mig 004). KHÔNG dùng hash-color fallback nữa. |
 | `sharing.js` | `generateShareCode()`, `redeemShareCode()`, `listShareGrants()`, `revokeShareGrant()`, `listAccessibleScopes()`, `useActiveScope()`, `useAccessibleScopes()`, `getActiveScope()`, `setActiveScope()`, `resetActiveScope()` | Cross-workspace data sharing (superapp mig 049). `useActiveScope()` trả ws đang thao tác (default ctx.workspaceId; đổi qua `<ScopeSwitcher />`). Dùng `scope.workspaceId` cho mọi query thay `ctx.workspaceId`. Xem section 3.5. |
 | `analytics.js` | `track(event, props)`, `trackScreen(name, props)`, `initAnalytics()`, `refreshIdentity()`, `resetAnalytics()` | PostHog wrapper. Auto-init từ `main.jsx`, auto-identify userId, auto-group workspace, auto-gắn `app_slug`/`workspace_id`/`role` vào mọi event. DEV mode tự skip (set `VITE_POSTHOG_DEBUG=1` nếu cần test local). Xem section 12 — event taxonomy chuẩn. |
+| `cross-app.js` | `appReader(slug)`, `isCrossAppOpen()`, `setCrossAppRead({enabled})`, `useCrossAppOpen()` | Đọc read-only data của mini-app KHÁC trong cùng workspace (superapp mig 056). Consumer: `appReader('producer').from('shared_view').select().eq('workspace_id', wsId)`. Producer publish view gated bằng `public.is_cross_app_open`. Toggle owner/admin bật per-ws. Xem section 3.7. |
 | `theme.js` | `colors`, `radii`, `fonts`, `space`, `fontSize` | Inline style nếu cần |
 
 **Component sẵn có** (`src/components/`):
@@ -758,11 +795,13 @@ Khi user nói:
 - **"Thêm feature X cho mini-app"** → viết UI trong `App.jsx` (hoặc tách `screens/`), dùng `db.from('table').select().eq('workspace_id', ctx.workspaceId)`, `useDialog()` cho confirm.
 - **"Cần table mới"** → viết migration `00X.sql` trong `migrations/` (chỉ `app_{slug}`), 4 RLS policies dùng helpers `public.can_access_app_data` + `public.is_owner_workspace_member` (xem section 3.2 + 3.5), instruct user submit qua Admin Portal Reviewer. Nếu UI sẽ subscribe table này qua `subscribeToTable()` (vote count live, chat, presence, …) → **thêm `-- @realtime` trên dòng riêng ngay trước `create table`**. KHÔNG viết tay `alter publication` / `replica identity full` — Reviewer auto-append idempotent. Xem section 3.6.
 - **"Share data sang ws khác / nhận share từ ws khác"** → owner gen mã: `generateShareCode({ expiresHours })` → hiện code cho user share. Follower redeem: `redeemShareCode({ code })` từ `src/lib/sharing.js`. Header render `<ScopeSwitcher />` để switch giữa scopes. Mọi query dùng `useActiveScope().workspaceId` thay `ctx.workspaceId`. KHÔNG cần migration mini-app riêng — RLS dùng helper `public.can_access_app_data(workspace_id, '{slug}')` (section 3.2) là đủ. Quản lý + revoke grant: `listShareGrants()` / `revokeShareGrant(grantId)`. Xem section 3.5.
+- **"Đọc data của mini-app KHÁC trong cùng workspace / cho app khác đọc data mình"** → CÙNG ws, nhiều app (khác §3.5 cross-workspace). Producer publish read-only VIEW gated bằng `public.is_cross_app_open(workspace_id)` (migration của producer, `security_invoker=true`, chỉ cột chia sẻ). Owner/admin bật toggle per-ws (Admin Portal → Cài đặt workspace, hoặc `setCrossAppRead({ enabled:true })`). Consumer đọc: `appReader('producer-slug').from('shared_view').select().eq('workspace_id', scope.workspaceId)` từ `src/lib/cross-app.js`. KHÔNG cần migration cho consumer. Xem section 3.7.
 - **"Gọi AI"** → tạo `api/X-proxy.js` dùng `_verify.js`, set key Vercel env. Anti-injection: wrap input, force JSON, validate output.
 - **"Upload file"** → dùng `upload(file, folder)` từ `storage.js`, lưu `object_key` vào DB, `getViewUrl()` khi render.
 - **"Push notification"** → local (chỉ device user): `callNative('PUSH_NOTIFICATION', { title, body })` từ `bridge.js`. Remote (gửi cho members workspace): `mushyApi.push({ title, body, data?, userIds? })` từ `mushy-api.js` → superapp `mini-proxy` → Expo Push API. `data` cần `appSlug` để Shell deeplink vào mini-app khi tap noti (thêm `screen`, `recordId` nếu cần — Shell pass qua query params). `workspaceId` auto-inject từ ctx — không cần truyền tay. **Khuyến nghị**: truyền `data.kind = '<event_slug>'` (snake_case, vd `'answer_to_asker'`, `'comment_reply'`, `'deadline_reminder'`) để user mute granular từng loại event ở superapp Settings → Thông báo. Thiếu `kind` → default `'generic'` → user chỉ mute được nguyên app. Xem jsdoc `src/lib/mushy-api.js`.
 - **"Tap-to-call số điện thoại"** → `bridge.tel('0901234567')`. Browser fallback tự `window.location = tel:...`.
-- **"Mở external link"** → `bridge.openUrl('https://...')` hoặc anchor `<a href="zalo://...">` (Shell route ra Linking tự động).
+- **"Mở external link"** → `bridge.openUrl('https://...')` hoặc anchor `<a href="zalo://...">` (Shell route ra Linking tự động). ⚠️ `openUrl` mở RA NGOÀI (browser/app native khác) — KHÔNG dùng để mở mini-app Mushy khác.
+- **"Mở mini-app KHÁC trong Mushy"** (vd app Passport mở app Kalendar) → `bridge.openApp({ appSlug: 'kalendar', screen?, recordId? })` từ `bridge.js`. Shell **push** route mini-app đích trong CÙNG workspace → app hiện tại giữ **keep-alive** dưới stack: user **back → quay về app gọi đúng chỗ đang dở** (KHÔNG reset). `screen`/`recordId` forward qua query (app đích đọc bằng `URLSearchParams`, giống deep link noti). Gating quyền (visibility/admin-only/RLS) do app đích tự enforce khi mount. **KHÔNG** dùng `<a href>` hay `bridge.openUrl` để mở mini-app khác — chúng điều hướng trong CHÍNH WebView hiện tại (mất `__APP_CONTEXT__`, token/workspace) → hỏng. Feature-detect runtime cũ: `getContext().capabilities?.includes('OPEN_APP')` (Shell chưa hỗ trợ → bridge trả `Unknown bridge type`). Resolve = "Shell nhận request", không phải "app đích load xong".
 - **"Share / Chia sẻ"** → `bridge.share({ title, message, url })` → native share sheet. Browser fallback navigator.share / clipboard.
 - **"Haptic / Rung phản hồi"** → `bridge.haptic('success'|'warning'|'error'|'light'|'medium'|'heavy'|'selection')`. Free UX win cho confirm/swipe action.
 - **"Quét QR"** → `bridge.scanQr()` → `{ data, type }`. Mở camera full-screen overlay trong Shell.
