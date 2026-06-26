@@ -16,15 +16,25 @@ import config from '../../mushy.config.json';
 const url = config.supabase.url;
 const anonKey = config.supabase.anonKey;
 const slug = config.slug;
-// Schema name normalize dash → underscore (slug "lunch-plan" → schema "app_lunch_plan").
-// Postgres unquoted identifier không nhận dash → migration SQL không phải quote.
-// Slug giữ nguyên dash cho URL/domain.
-const schemaSlug = slug.replace(/-/g, '_');
 // __VERCEL_ENV__ là global build-time constant (vite.config.js define) — replace
 // ở build, KHÔNG phải runtime. Bypass Vite internal handling của import.meta.env.
 // eslint-disable-next-line no-undef
 const vercelEnv = typeof __VERCEL_ENV__ !== 'undefined' ? __VERCEL_ENV__ : 'development';
-const schema = vercelEnv === 'production' ? `app_${schemaSlug}` : `app_${schemaSlug}_dev`;
+
+// Schema name env-aware cho 1 slug BẤT KỲ:
+//   production → app_{slug}   |   preview/dev → app_{slug}_dev
+// Dash normalize → underscore (slug "lunch-plan" → "app_lunch_plan") vì Postgres
+// unquoted identifier không nhận dash. Slug giữ dash cho URL/domain.
+// Export để cross-app read build query trỏ sang schema của app KHÁC trong cùng
+// workspace (read-only qua view producer publish — xem src/lib/cross-app.js +
+// superapp mig 056). Giả định producer + consumer deploy cùng env (cả 2 prod
+// hoặc cả 2 dev) — schema khớp suffix.
+export function appSchema(targetSlug) {
+  const norm = String(targetSlug).replace(/-/g, '_');
+  return vercelEnv === 'production' ? `app_${norm}` : `app_${norm}_dev`;
+}
+
+const schema = appSchema(slug);
 
 if (!url || !anonKey) {
   console.warn('[supabase] thiếu supabase.url hoặc supabase.anonKey trong mushy.config.json');

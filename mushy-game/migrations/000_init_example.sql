@@ -137,3 +137,20 @@ create trigger trg_tasks_updated_at
 --
 -- KHÔNG opt-in mọi table — tốn WAL + Supabase Realtime quota. Chỉ table có UI
 -- live (vote, chat, presence...) mới cần.
+
+-- ---------- Cross-app read (tuỳ chọn) — superapp mig 056 ----------
+-- Muốn app KHÁC trong cùng workspace đọc read-only data của app này? Publish 1
+-- VIEW chỉ chứa cột muốn chia sẻ, gated bằng public.is_cross_app_open(ws).
+-- Chỉ trả row khi owner/admin của ws đã bật toggle "Đọc chéo giữa mini-app"
+-- (Admin Portal → Cài đặt workspace). Consumer đọc qua appReader() trong
+-- src/lib/cross-app.js. Xem CLAUDE.md §3.7.
+--
+-- security_invoker=true → base-table RLS (membership) vẫn áp; view chỉ thêm
+-- gate toggle. Reviewer auto-duplicate sang app_demo_dev; public.* giữ nguyên.
+--
+--   create or replace view app_demo.shared_tasks
+--   with (security_invoker = true) as
+--   select id, workspace_id, title, status, updated_at   -- CHỈ cột chia sẻ
+--   from app_demo.tasks
+--   where public.is_cross_app_open(workspace_id);
+--   grant select on app_demo.shared_tasks to authenticated;

@@ -114,6 +114,26 @@ export const bridge = {
 
   scanQr: () => callNative('SCAN_QR'),
 
+  // Mở 1 mini-app KHÁC trong cùng workspace (không qua notification).
+  // payload: { appSlug, screen?, recordId? }
+  //   appSlug  — slug mini-app đích (BẮT BUỘC)
+  //   screen   — màn hình SPA bên trong app đích (Shell forward qua query
+  //              ?screen=...; app đích đọc bằng URLSearchParams)
+  //   recordId — record cụ thể (?recordId=...)
+  // Shell push route mới → app HIỆN TẠI giữ keep-alive dưới stack: user back
+  // từ app đích → quay về app này đúng chỗ đang dở (KHÔNG reset).
+  // Resolve = "Shell đã nhận request" (không phải "app đích load xong").
+  // Chỉ chạy trong Shell native — browser dev không có mini-app khác để mở.
+  // Feature-detect: getContext().capabilities?.includes('OPEN_APP').
+  async openApp({ appSlug, screen, recordId } = {}) {
+    if (!appSlug) throw new Error('openApp cần appSlug');
+    if (!isInShell()) {
+      console.warn('[bridge] openApp chỉ chạy trong Shell native — bỏ qua ở browser dev');
+      return { opening: false, reason: 'not-in-shell' };
+    }
+    return callNative('OPEN_APP', { appSlug, screen, recordId });
+  },
+
   // Browser không có biometric — luôn fail rõ ràng để mini-app fallback password.
   async biometric(opts = {}) {
     if (!isInShell()) throw new Error('Biometric chỉ chạy trong Shell native');
@@ -184,6 +204,11 @@ async function mock(type, payload) {
       // Mock: trả giá trị giả để dev test flow downstream.
       console.log('[mock scan-qr] returning fake');
       return { data: 'MOCK-QR-DATA', type: 'qr' };
+    case 'OPEN_APP':
+      // Browser dev: không có Shell + không có mini-app khác để mở. Log để
+      // dev biết đã gọi đúng, không navigate gì.
+      console.log('[mock open-app]', payload?.appSlug, payload?.screen ?? '', payload?.recordId ?? '');
+      return { opening: false, reason: 'not-in-shell', appSlug: payload?.appSlug };
     case 'BIOMETRIC':
       console.log('[mock biometric] auto-success');
       return { success: true };

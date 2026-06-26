@@ -85,53 +85,66 @@ Build the standalone `level-editor/` first as the owner/editor surface for autho
 ### Milestone 3 Checkpoint
 - Added editor-local Word-Guess constants, generator metadata, registry, date seed helper, and pure `generate()`/`generateForDate()` functions.
 - Added deterministic `seededRandom()` with `RNG_ALGORITHM_VERSION = 'mulberry32-hash31-v1'`; RNG sequence changes require a `generator_version` bump.
-- Added committed generated `wordLists.js`, `wordlists:build`, and `wordlists:verify`. The committed list is generated from SCOWL 2020.12.07 (`english-words.35` answers and `english-words.50` valid guesses), with LDNOOBW applied to answers.
+- Added committed generated `wordLists.js`, `wordlists:build`, and `wordlists:verify`. The intended source policy is SCOWL 2020.12.07 `english-words.20`-style answers plus merged SCOWL-50 valid-guess variants, with LDNOOBW applied to answers.
 - Added duplicate-answer utility for later API/UI use without coupling it to Supabase or HTTP.
 - Verification: `npm run generator:verify`, `npm run schema:verify`, and `npm run build` pass in `level-editor/`.
 
 ## Milestone 4 — Level Authoring APIs
-- [ ] `LE-030` Add authenticated level preview API.
+- [x] `LE-030` Add authenticated level preview API.
   Done when: the editor can request generated/custom preview data for a game/date without saving.
 
-- [ ] `LE-031` Add level list/calendar API.
+- [x] `LE-031` Add level list/calendar API.
   Done when: the editor can load daily level status across a date range.
 
-- [ ] `LE-032` Add save custom level API.
+- [x] `LE-032` Add save custom level API.
   Done when: authenticated editors can create or replace custom level content for a date.
 
-- [ ] `LE-033` Add clear custom override API.
+- [x] `LE-033` Add clear custom override API.
   Done when: an editor can revert a date back to generated content without deleting generated behavior.
 
-- [ ] `LE-034` Add duplicate-answer check API.
+- [x] `LE-034` Add duplicate-answer check API.
   Done when: the API reports whether a proposed Word-Guess answer already appears in nearby or existing levels.
 
-- [ ] `LE-035` Add API tests for save, clear, preview, and duplicate checks.
+- [x] `LE-035` Add API tests for save, clear, preview, and duplicate checks.
   Done when: tests cover owner/editor access, invalid payloads, and stable date behavior.
 
+### Milestone 4 Checkpoint
+- Added editor-session API auth that verifies Supabase access tokens server-side from `Authorization: Bearer <token>`.
+- Added `GET /api/levels/preview`, `GET /api/levels`, `POST /api/levels`, `DELETE /api/levels`, and `GET /api/levels/check-duplicate`.
+- Preview is read-only and uses the local generator registry. Save writes custom levels only after Word-Guess content validation.
+- Level writes do not compute `level_number` or `content_hash`; the editor-owned database triggers remain responsible for those persisted values.
+- Tests cover auth failures, preview/list/save/clear/duplicate behavior, invalid payload rejection, and trigger-owned field boundaries.
+
 ## Milestone 5 — Cron And Daily Catalog Maintenance
-- [ ] `LE-040` Add cron date resolution and auth guard.
+- [x] `LE-040` Add cron date resolution and auth guard.
   Done when: `level-editor/api/cron/generate-levels.js` accepts Vercel Cron calls plus manual maintainer calls, validates `CRON_SECRET`, resolves a default UTC date, accepts an optional `date=YYYY-MM-DD`, rejects invalid/future-before-launch dates clearly, and never uses editor browser sessions.
 
-- [ ] `LE-041` Add active-game loading for cron.
+- [x] `LE-041` Add active-game loading for cron.
   Done when: the cron endpoint loads active `games` rows from the editor-owned Supabase project with server-side credentials and returns a safe per-game result shape without exposing secrets.
 
-- [ ] `LE-042` Add generated level materialization.
+- [x] `LE-042` Add generated level materialization.
   Done when: for each active game, cron calls the local `level-editor` generator registry, builds the stable seed, inserts a missing `daily_levels` row with generated/published source/status and version snapshots, and relies on database triggers for `level_number` and `content_hash`.
 
-- [ ] `LE-043` Preserve existing and custom rows.
+- [x] `LE-043` Preserve existing and custom rows.
   Done when: cron is idempotent: existing generated/published rows are reported as skipped/unchanged, custom rows are never overwritten, retries are safe, and the response distinguishes inserted, skipped existing, skipped custom, and failed games.
 
-- [ ] `LE-044` Add launch-date backfill workflow.
+- [x] `LE-044` Add launch-date backfill workflow.
   Done when: maintainers have a documented/manual command or script to call `POST /api/cron/generate-levels?date=YYYY-MM-DD` immediately after migration so launch-date level `001` is materialized even if the scheduled cron already passed.
 
-- [ ] `LE-045` Add Vercel Cron configuration.
+- [x] `LE-045` Add Vercel Cron configuration.
   Done when: `level-editor/vercel.json` schedules the endpoint at midnight UTC and uses the same route as the manual backfill path.
 
-- [ ] `LE-046` Add cron tests.
+- [x] `LE-046` Add cron tests.
   Done when: tests cover auth failures, default UTC date resolution, manual date override, idempotency, custom override preservation, version snapshots, database-assigned `level_number`, and database-maintained `content_hash`.
 
-- [ ] `LE-047` Add cron observability and dry-run support.
+- [x] `LE-047` Add cron observability and dry-run support.
   Done when: non-production maintainers can run a safe dry-run/check path that reports intended per-game actions without inserting rows, and real cron logs include `{ gameSlug, puzzleDate, action, levelNumber, generatorVersion }` without logging generated answers in production.
+
+### Milestone 5 Checkpoint
+- Added `api/cron/generate-levels.js` with `CRON_SECRET` authorization for both Vercel GET calls and manual POST backfill calls.
+- Added cron service logic that loads active games, generates missing levels from the editor-local generator registry, skips existing/custom rows, and leaves `level_number` plus `content_hash` to database triggers.
+- Added `dryRun=1` support and production-safe per-game logs that do not include generated answers.
+- Added `vercel.json` with a midnight UTC schedule and README backfill instructions for migration-date level `001`.
 
 ## Milestone 6 — Level Authoring UI
 - [ ] `LE-050` Build the level calendar/list screen.

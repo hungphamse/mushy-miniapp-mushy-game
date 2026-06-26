@@ -38,17 +38,41 @@ npm run dev
 - The migration is intended to be re-runnable: table/index creation is guarded, triggers are recreated, and the `word-guess` seed keeps its original launch date on conflict.
 - After applying the migration, manually call the level-generation cron/backfill endpoint for the launch date so level `001` exists even if the scheduled cron already passed.
 
+## Cron And Backfill Workflow
+
+- `api/cron/generate-levels.js` is the level catalog publisher.
+- Vercel Cron calls it once per day at midnight UTC through `vercel.json`.
+- Vercel sends `Authorization: Bearer <CRON_SECRET>` automatically when `CRON_SECRET` is set on the Vercel project.
+- Manual maintainer calls must send the same bearer token.
+- The default date is the current UTC date.
+- Use `date=YYYY-MM-DD` to backfill a specific non-future date.
+- Use `dryRun=1` to inspect intended actions without inserting rows.
+- Existing generated rows are skipped, custom rows are never overwritten, and database triggers assign `level_number` and `content_hash`.
+
+After applying `migrations/001_level_catalog_schema.sql`, get the seeded game launch date from the editor-owned Supabase project and backfill it immediately:
+
+```powershell
+$env:LEVEL_EDITOR_BASE_URL = "https://your-level-editor.vercel.app"
+$env:CRON_SECRET = "same-secret-configured-on-vercel"
+$launchDate = "YYYY-MM-DD"
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "$env:LEVEL_EDITOR_BASE_URL/api/cron/generate-levels?date=$launchDate" `
+  -Headers @{ Authorization = "Bearer $env:CRON_SECRET" }
+```
+
 ## Generator Workflow
 
 - Word-Guess generator code is editor-local under `src/lib/generators/`; do not import from `mushy-game/`.
 - `npm run generator:verify` audits the committed word lists and runs fixed-date generator tests.
 - `src/lib/utils/random.js` exports `RNG_ALGORITHM_VERSION = 'mulberry32-hash31-v1'`; changing the RNG sequence requires a `generator_version` bump for affected games.
-- `src/lib/data/wordLists.js` is committed generated data from SCOWL 2020.12.07 (`english-words.35` answers and `english-words.50` valid guesses), filtered by LDNOOBW for answers.
+- `src/lib/data/wordLists.js` is committed generated data. The intended source policy is SCOWL 2020.12.07 `english-words.20`-style answers plus merged SCOWL-50 valid-guess variants, filtered by LDNOOBW for answers.
 - To regenerate word lists, place raw sources in `scripts/wordlist-sources/` and run `npm run wordlists:build`, then `npm run generator:verify`.
 - Preferred source names for configurable builds:
   - `scowl-answers.txt` or `scowl-answers-*.txt` for answer lists. For easier answers, copy `english-words.20` to `scowl-answers.txt`.
   - `scowl-valid-guesses.txt` or `scowl-valid-guesses-*.txt` for valid guesses. To merge forgiving guesses, copy multiple files such as `english-words.50`, `american-words.50`, and `british-words.50` to `scowl-valid-guesses-english.txt`, `scowl-valid-guesses-american.txt`, and `scowl-valid-guesses-british.txt`.
-  - If these preferred names are absent, the builder falls back to legacy `scowl-35.txt` and `scowl-50.txt`.
+  - If these preferred names are absent, the builder falls back to legacy local source filenames for older checkouts.
 - Raw SCOWL/profanity source files stay gitignored; commit only the generated `src/lib/data/wordLists.js`.
 
 ## Security Notes
